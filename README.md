@@ -40,7 +40,7 @@ sh run_all.sh
 
 在對話框輸入牌局敘述，就像跟教練聊天一樣：
 
-> 「我在 6-max 急速桌，UTG open 3BB，我在 BTN 手持 AhKh 3-Bet 到 9BB，對方跟注。翻牌 Ks Tc 7d，對方 Check，我該怎麼做？」
+> 「UTG open 3BB，我在 BTN 3-Bet 到 9BB，對方跟注。flop 對方 Check，我現在該怎麼做？」
 
 系統會分析並給出建議行動與下注尺寸。
 

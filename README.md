@@ -1,86 +1,92 @@
-# 🃏 My Poker Coach (我的撲克教練)
+# My Poker Coach (我的撲克教練)
 
-歡迎使用 **My Poker Coach**！這是一個超級聰明的 AI 撲克教練，能幫你分析手牌，教你怎麼打牌才會贏！ 🏆
+歡迎使用 **My Poker Coach**。這是一個基於 **GTO (賽局理論最佳化)** 的 AI 撲克教練系統，能夠根據您的手牌與當前局勢，提供最佳的決策建議 (下注、過牌、棄牌)。
 
-## 🌟 這是什麼？
+## 系統特色
 
-這是一個用 Python 寫的程式，它懂很多 **GTO (最佳策略)** 的知識。只要你告訴它手牌和情況，它就會告訴你現在該做什麼（下注、過牌、棄牌）。
-
-就像有一個職業選手坐在你旁邊教你打牌一樣！ 👨‍🏫
-
----
-
-## 🚀 怎麼開始？ (超簡單教學)
-
-### 🖥️ Windows 使用者
-
-只需要點擊資料夾裡的檔案，完全不用打字！
-
-1. **安裝工具包** 📦
-   - 找到 `install.bat`，點兩下執行它。
-   - 等它跑完，看到「安裝完成」就可以了。
-
-2. **設定金鑰** 🔑
-   - 找到 `setup_env.bat`，點兩下執行它。
-   - 它會產生一個 `.env` 檔案。
-   - **重要**：用記事本打開 `.env` 檔案，把你的 API Key 填進去。
-
-3. **啟動教練** 🚀
-   - 找到 `start.bat`，點兩下執行它。
-   - 等個幾秒鐘，打開網頁瀏覽器。
-   - 在網址列輸入：Following address: `http://localhost:8000`
-   - 開始跟教練聊天吧！
+- **GTO 策略核心**：基於數學與賽局理論提供建議。
+- **自然語言互動**：直接描述牌局狀況即可獲得分析。
+- **簡易操作**：提供自動化腳本，無需複雜設定。
 
 ---
 
-### 🍎 Mac / Linux 使用者
+## 快速開始
 
-打開終端機 (Terminal)，切換到這個資料夾，然後輸入下面的指令：
+我們為不同作業系統提供了自動化腳本，請依照您的系統進行操作。
 
-1. **安裝工具包** 📦
+### Windows 使用者
+
+請依序雙擊執行資料夾中的以下檔案：
+
+1. **`install.bat`** (安裝套件)
+   - 自動下載並安裝所需的 Python 套件。
+
+2. **`setup_env.bat`** (設定環境)
+   - 建立 `.env` 設定檔。
+   - **請注意**：執行後請使用記事本開啟 `.env` 檔案，並填入您的 API Key。
+
+3. **`start.bat`** (啟動程式)
+   - 啟動伺服器。
+   - 啟動成功後，請開啟瀏覽器輸入：`http://localhost:8000`
+
+---
+
+### Mac / Linux 使用者
+
+請開啟終端機 (Terminal)，切換至專案目錄並執行以下指令：
+
+1. **安裝套件**
    ```bash
    sh install.sh
    ```
 
-2. **設定金鑰** 🔑
+2. **設定環境**
    ```bash
    sh setup_env.sh
-   # 記得用文字編輯器打開 .env 填入你的 API Key 喔！
-   # 例如: nano .env
+   # 執行後請編輯 .env 檔案填入 API Key
    ```
 
-3. **啟動教練** 🚀
+3. **啟動程式**
    ```bash
    sh start.sh
    ```
-   然後打開瀏覽器前往 `http://localhost:8000`。
+   啟動後請開啟瀏覽器前往 `http://localhost:8000`。
 
 ---
 
-## 🎮 怎麼用？
+## 使用說明
 
-在網頁上的聊天框框，你可以這樣問教練：
+在網頁介面的對話框中輸入牌局資訊，例如：
 
-- 「我在 BTN 本位，拿到 AKs，UTG 玩家加注，我該怎麼辦？」
-- 「翻牌是 A 紅心 K 方塊 7 黑桃，我是進攻方，該下注多少？」
+- 「我在6 max 急速桌，後手150bb的utg+1 open 3bb, 我在buttun 後手有100bb 手拿 KhTh選擇 3b 到 9bb, sb fold, bb fold, utg+1 call. flop Ks Tc 7d, 對手check, 此時我該 check 還是 bet?」
 
-教練會分析：
-- ✅ **你的優勢** (Range Advantage)
-- ✅ **勝率** (Win Rate)
-- ✅ **建議行動** (GTO Strategy)
+系統將會分析：
+- 雙方範圍優勢 (Range Advantage)
+- 建議行動與頻率 (GTO Strategy)
 
 ---
 
-## 🛠️ 對開發者說 (進階)
+## 開發資訊
 
-如果你是工程師，這裡有一些技術細節：
-- **核心語言**: Python 3.9+
-- **框架**: Pydantic, FastAPI
-- **架構**: 
-    - `strategy/`: 策略引擎
-    - `services/`: LLM 串接
-    - `server.py`: 伺服器入口
+- **語言**: Python 3.9+
+- **框架**: FastAPI
+- **架構**:
+    - `core/`: 核心基礎設施
+        - `parser.py`: 自然語言解析器，將使用者輸入轉換為結構化資料
+        - `config.py`: 系統全域設定
+    - `features/`: 撲克邏輯特徵提取
+        - `cards.py`: 撲克牌物件模型與基礎邏輯
+        - `context.py`: 牌局上下文管理 (Context)
+    - `strategy/`: 策略運算引擎
+        - `engine.py`: 策略決策總入口
+        - `gto.py`: 數學模型計算 (MDF, Bluff Ratio, Alpha)
+        - `streets/`: 各條街 (Preflop/Flop/Turn/River) 的具體策略實現
+    - `services/`: 外部服務整合
+        - `llm_client.py`: 與 LLM (OpenAI) 的通訊介面
+        - `prompts.py`: AI 角色設定與提示詞管理
+    - `server.py`: FastAPI 應用程式入口與 API 定義
+    - `agent.py`: 整合策略分析與自然語言生成的教練代理人
 
-## 📄 版權
+## License
 
-MIT License (這表示你可以自由使用它！)
+MIT License

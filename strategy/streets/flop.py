@@ -59,20 +59,28 @@ def _handle_open_action(features: Dict[str, Any], ctx: Dict[str, Any], adv_data:
     reasons = []
     matrix = {"check": 1.0}
 
+    # [Range Data Integration]
+    v_summary = adv_data.get("villain_summary", {})
+    v_nuts_freq = sum(v_summary.get(k, 0) for k in ["straight_flush", "quads", "full_house", "flush", "straight", "set"])
+    
+    if v_nuts_freq < 0.035 and range_adv > 1.1:
+        reasons.append("對手範圍隱含封頂 (Capped)，缺乏強牌組合。")
+    
     # 2. 核心啟發式：多尺寸下注 (Multi-Sizing)
-    sizing_ratio = 0.75 # Default Large
+    sizing_ratio = 0.33 # Default Small (33%)
     size_reason = "基於面板與優勢的標準下注。"
 
-    # A. 幾何下注啟發式 (Geometric Sizing): 當 SPR 適中且具備堅果優勢時，規劃全壓路徑
+    # A. 幾何下注啟發式 (Geometric Sizing)
     if nut_adv >= 1.2 and 2.5 <= spr <= 8.0:
-        sizing_ratio = calculate_geometric_sizing(spr, 3) # 剩餘 3 街 (Flop, Turn, River)
+        sizing_ratio = calculate_geometric_sizing(spr, 3) 
         size_reason = f"具備顯著堅果優勢 ({nut_adv}) 且 SPR ({spr}) 適中，採用幾何尺寸規劃三街全壓。"
         
-    # [High Priority] B. Range Bet (33%): Range Advantage Oriented
-    # 修正: 只要有顯著 Range Advantage (>= 1.15)，優先採取 33% 壓迫，忽略面板動態 (除非是 Monotone)
-    elif range_adv >= 1.15 and not is_monotone:
+    # [High Priority] B. Range Bet (33%): Range Advantage OR Dry Board
+    # 修正: 只要有顯著 Range Advantage (>= 1.15) 或 面板乾燥，優先採取 33%
+    elif (range_adv >= 1.15 and not is_monotone) or (not board_info.get("is_dynamic") and board_info.get("connectedness_score", 0) < 50):
         sizing_ratio = 0.33
-        size_reason = f"具備顯著範圍優勢 (RA={range_adv:.2f})，優先使用 33% 範圍下注壓迫對手。"
+        reason_tag = "顯著範圍優勢" if range_adv >= 1.15 else "乾燥靜態面板"
+        size_reason = f"具備{reason_tag}，優先使用 33% 小尺寸下注 (Range Bet / Dry Board C-Bet)。"
         
     # C. 常規大注 (75%): 動態/濕潤面板 (且無顯著 Range Advantage 時)
     elif board_info.get("is_dynamic") or board_info.get("connectedness_score", 0) >= 60:

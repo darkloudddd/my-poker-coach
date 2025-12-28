@@ -353,9 +353,6 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
 
         meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
         missing_fields = meta.get("missing_fields") or data.get("missing_fields") or []
-        if "error" in data:
-            raise ValueError(f"解析錯誤: {data['error']}")
-
         if missing_fields:
             # Filter out missing fields that can be inferred (specifically 'call' amounts)
             # The LLM might flag "actions.preflop.call.amount" as missing, but our logic computes it.
@@ -365,8 +362,10 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
                 # If it's a Call or Check action, we don't need the amount typically
                 if "call.amount" in f_str or "check.amount" in f_str:
                     continue
-                # Also if it's just "actions" but we actually have actions, ignore it? 
-                # No, "actions" usually means the whole list is empty.
+                # [NEW] Ignore stack missing fields, we will default them to 100bb
+                if "stack_bb" in f_str:
+                    continue
+                
                 real_missing.append(field)
             
             if real_missing:
@@ -392,12 +391,20 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
                 if final_missing:
                     raise ValueError(f"資訊不足，請補充: {', '.join(map(str, final_missing))}")
 
+        if "error" in data:
+            # 如果是「需要補充」且前面已經檢查過 missing_fields (或 missing_fields 為空),
+            # 我們假設若還有缺漏會在後面的 _validate_constraints 或 hard check 中被抓到
+            if data["error"] == "需要補充":
+                pass
+            else:
+                raise ValueError(f"解析錯誤: {data['error']}")
+
         required_fields = [
             "hero_position",
             "villain_position",
             "hero_hole_cards",
-            "hero_stack_bb",
-            "villain_stack_bb",
+            # "hero_stack_bb",    # defaulting to 100
+            # "villain_stack_bb", # defaulting to 100
             "board_cards",
             "street",
             "actions",
@@ -424,10 +431,14 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
         hero_stack = hero_info.get("stack_bb")
         if hero_stack is None: hero_stack = data.get("hero_stack_bb")
         if hero_stack is None: hero_stack = current_state.get("hero_stack_bb")
+        # [NEW] Default to 100bb if not specified
+        if hero_stack is None: hero_stack = 100.0
 
         villain_stack = villain_info.get("stack_bb")
         if villain_stack is None: villain_stack = data.get("villain_stack_bb")
         if villain_stack is None: villain_stack = current_state.get("villain_stack_bb")
+        # [NEW] Default to 100bb if not specified
+        if villain_stack is None: villain_stack = 100.0
 
         hero_cards = hero_info.get("cards") or data.get("hero_hole_cards") or current_state.get("hero_hole_cards") or []
 

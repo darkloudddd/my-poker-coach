@@ -63,6 +63,19 @@ def _handle_open_action(features: Dict[str, Any], ctx: Dict[str, Any], adv_data:
     matrix = {"check": 1.0}
     sizing_ratio = 0.75 # Default
     
+    # [Range Data Integration] Deep analysis of range composition
+    v_summary = adv_data.get("villain_summary", {})
+    v_nuts_freq = sum(v_summary.get(k, 0) for k in ["straight_flush", "quads", "full_house", "flush", "straight", "set"])
+    v_draw_freq = v_summary.get("draw", 0) + v_summary.get("weak_draw", 0)
+    v_air_freq = v_summary.get("air", 0)
+    
+    if v_nuts_freq < 0.05 and nut_adv > 1.2:
+        reasons.append(f"偵測到對手範圍缺乏堅果 (Nuts < 5%)，屬於 Capped Range。")
+    if v_draw_freq > 0.25:
+        reasons.append(f"對手範圍含有高比例聽牌 ({v_draw_freq*100:.0f}%)，需注意保護或價值下注。")
+    if v_air_freq > 0.4:
+        reasons.append(f"對手範圍含有大量空氣牌 ({v_air_freq*100:.0f}%)。")
+    
     if has_initiative:
         should_barrel = False
         
@@ -107,12 +120,12 @@ def _handle_open_action(features: Dict[str, Any], ctx: Dict[str, Any], adv_data:
                 size_reason = "單色面板 (Monotone)，使用小注 (33%) 進行剝削與控池。"
 
             # B. 幾何下注啟發式 (Geometric Sizing)
-            elif nut_adv >= 1.2 and 1.5 <= spr <= 6.0:
+            elif nut_adv >= 1.15 and 1.5 <= spr <= 6.0:
                 sizing_ratio = calculate_geometric_sizing(spr, 2) # 剩餘 2 街
                 size_reason = f"轉牌具備顯著堅果優勢 ({nut_adv:.2f}) 且 SPR ({spr:.1f}) 適中，採用幾何尺寸規劃兩街全壓。"
 
             # C. 超額下注 (Overbet 125%)
-            elif nut_adv >= 1.5 and not has_scare:
+            elif nut_adv >= 1.3 and not has_scare:
                 sizing_ratio = 1.25
                 size_reason = "極端堅果優勢且轉牌為空白牌，使用超額下注施加最大極化壓力。"
 

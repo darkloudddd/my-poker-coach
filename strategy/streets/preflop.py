@@ -26,7 +26,7 @@ def _extract_preflop_raises(actions: List[Dict[str, Any]]) -> List[Dict[str, Any
         if not isinstance(item, dict):
             continue
         action = str(item.get("action", "")).lower()
-        if action not in {"open", "raise"}:
+        if action not in {"open", "raise", "bet"}:
             continue
         player = str(item.get("player", "")).upper()
         amount = _coerce_amount(item.get("amount"))

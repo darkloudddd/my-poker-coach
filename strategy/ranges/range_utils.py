@@ -26,17 +26,45 @@ def apply_action_history_to_ranges(features: Dict[str, Any], board_cards: List[s
     # 初始死牌 (公牌 + Hero 手牌)
     dead_set = set(board_cards) | set(hero_hole_cards)
     
-    # 1. 建立初始範圍 (Preflop) 並展開為 Combos
-    h_pre_weighted = _flatten(get_preflop_range("RFI", hero_pos))
-    hero_range = RANGE_ANALYZER.convert_weighted_range_to_combos(h_pre_weighted, dead_set)
+    # 1. 分析 Preflop 結構以決定初始範圍
+    # [FIX] 區分加注底池 (Raised Pot) 與 跛入底池 (Limped Pot)
+    preflop_acts = []
+    if isinstance(actions, dict):
+        preflop_acts = actions.get("preflop", [])
+    elif isinstance(actions, list):
+        preflop_acts = [a for a in actions if a.get("street") == "preflop"]
+        
+    has_raise = any(str(a.get("action", "")).lower() in ["open", "raise"] for a in preflop_acts)
+    
+    if has_raise:
+        # 加注底池：假設 Hero RFI (或被動), Villain Call (或 RFI)
+        # 這裡簡化假設 Hero 是主要視角，若 Hero 沒 Open 則可能邏輯需反轉，但暫維持原樣
+        h_pre_weighted = _flatten(get_preflop_range("RFI", hero_pos))
+        
+        # 對於防守方 (Villain)
+        v_preflop_data = get_preflop_range("facing_open", villain_pos, hero_pos)
+        v_call_range = {}
+        for hand, acts in v_preflop_data.items():
+            if "call" in acts:
+                v_call_range[hand] = acts["call"]
+        v_pre_weighted = _flatten(v_call_range)
+    else:
+        # 跛入/過牌底池 (Limped Pot)：雙方範圍極寬且封頂 (Capped)
+        # 模擬 Top 60% 範圍，並移除頂端 5% 強牌 (AA-TT, AK, AQs)
+        # 這裡直接調用寬範圍 (RFI UTG 類似 Top 15%, BTN 50%) - 我們用 BTN 範圍作為基底並放寬
+        base_range = _flatten(get_preflop_range("RFI", "BTN")) 
+        
+        # 移除強牌 (Capping)
+        capped_range = {}
+        premium = {"AA", "KK", "QQ", "JJ", "TT", "AKs", "AKo", "AQs"}
+        for hand, w in base_range.items():
+            if hand not in premium:
+                capped_range[hand] = 0.8 # 稍微降低權重表示不確定性
+        
+        h_pre_weighted = capped_range
+        v_pre_weighted = capped_range.copy()
 
-    # 對於防守方 (Villain)
-    v_preflop_data = get_preflop_range("facing_open", villain_pos, hero_pos)
-    v_call_range = {}
-    for hand, acts in v_preflop_data.items():
-        if "call" in acts:
-            v_call_range[hand] = acts["call"]
-    v_pre_weighted = _flatten(v_call_range)
+    hero_range = RANGE_ANALYZER.convert_weighted_range_to_combos(h_pre_weighted, dead_set)
     villain_range = RANGE_ANALYZER.convert_weighted_range_to_combos(v_pre_weighted, dead_set)
 
     # 2. 依次對各街行動進行過濾 (Range Capping)

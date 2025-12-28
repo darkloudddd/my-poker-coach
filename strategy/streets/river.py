@@ -48,6 +48,13 @@ def _handle_open_action(features: Dict[str, Any], ctx: Dict[str, Any], adv_data:
     matrix = {"check": 1.0}
     size_strategy = "medium" # Default
     
+    # [Range Data Integration]
+    v_summary = adv_data.get("villain_summary", {})
+    v_nuts_freq = sum(v_summary.get(k, 0) for k in ["straight_flush", "quads", "full_house", "flush", "straight", "set"])
+    
+    if v_nuts_freq < 0.03 and nut_adv > 1.2:
+        reasons.append("對手河牌範圍極度缺乏堅果 (Capped)，極化下注效用最大化。")
+    
     if nut_adv >= 1.2:
         reasons.append(f"具有顯著堅果優勢 ({nut_adv:.2f})。")
         
@@ -60,10 +67,10 @@ def _handle_open_action(features: Dict[str, Any], ctx: Dict[str, Any], adv_data:
     sizing_ratio = 0.75 # Default
     size_desc = "標準下注"
     
-    if nut_adv >= 1.6:
+    if nut_adv >= 1.4:
         sizing_ratio = 2.0
         size_desc = "雙倍底池下注 (200% Pot)"
-    elif nut_adv >= 1.3:
+    elif nut_adv >= 1.2:
         sizing_ratio = 1.5
         size_desc = "超額下注 (150% Pot)"
     elif nut_adv >= 1.2:

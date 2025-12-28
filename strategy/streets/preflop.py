@@ -98,7 +98,7 @@ def recommend_preflop(features: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str
     # Count limps explicitly
     actual_limps = 0
     for act in preflop_actions:
-        if act.get("action") == "call":
+        if act.get("action") in ("call", "limp"):
             actual_limps += 1
             
     # Heuristic: If there are calls, it's an ISO spot (unless we are BB checking)

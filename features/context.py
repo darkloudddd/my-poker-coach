@@ -368,25 +368,58 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
                 
                 real_missing.append(field)
             
-            if real_missing:
-                # [FIX]: Check if we have these fields in current_state specific logic
-                final_missing = []
-                for field in real_missing:
-                    # Map field names from LLM to current_state keys
-                    state_key = field
-                    if field == "hero.cards" or field == "hero_hole_cards": state_key = "hero_hole_cards"
-                    elif field == "board.cards" or field == "board_cards": state_key = "board_cards"
-                    elif field == "hero.stack_bb" or field == "hero_stack_bb": state_key = "hero_stack_bb"
-                    elif field == "villain.stack_bb" or field == "villain_stack_bb": state_key = "villain_stack_bb"
-                    elif field == "hero.position" or field == "hero_position": state_key = "hero_position"
-                    elif field == "villain.position" or field == "villain_position": state_key = "villain_position"
-                    
-                    # If current_state has it, we are good
-                    val = current_state.get(state_key) if current_state else None
-                    if val is not None and val != [] and val != "":
-                        continue
-                    
-                    final_missing.append(field)
+            # [FIX] Double check if "amount" is missing but "ratio" is present in data
+            # LLM might flag amount as missing even if it extracted pot_ratio
+            final_missing = []
+            for field in real_missing:
+                # 1. Check if we have this data in current_state (existing logic)
+                state_key = field
+                if field == "hero.cards" or field == "hero_hole_cards": state_key = "hero_hole_cards"
+                elif field == "board.cards" or field == "board_cards": state_key = "board_cards"
+                elif field == "hero.stack_bb" or field == "hero_stack_bb": state_key = "hero_stack_bb"
+                elif field == "villain.stack_bb" or field == "villain_stack_bb": state_key = "villain_stack_bb"
+                elif field == "hero.position" or field == "hero_position": state_key = "hero_position"
+                elif field == "villain.position" or field == "villain_position": state_key = "villain_position"
+                
+                val = current_state.get(state_key) if current_state else None
+                if val is not None and val != [] and val != "":
+                    continue
+
+                # 2. [NEW] Check for Ratio/Pct if amount is missing
+                if "amount" in str(field).lower():
+                    # Try to find the action object in data
+                    # Field format might be "actions.flop.amount" or "actions.flop.0.amount"
+                    parts = str(field).split('.')
+                    if len(parts) >= 2 and parts[0] == "actions":
+                        street_key = parts[1]
+                        # We just check ALL actions in that street for any ratio presence
+                        actions_data = data.get("actions", {})
+                        if isinstance(actions_data, dict):
+                            street_actions = actions_data.get(street_key, [])
+                            if isinstance(street_actions, list):
+                                has_ratio = False
+                                for act in street_actions:
+                                    if isinstance(act, dict):
+                                        # Check common ratio keys
+                                        if any(k in act for k in ["pot_ratio", "amount_ratio", "size_ratio", "ratio", "amount_pct", "size_pct"]):
+                                            has_ratio = True
+                                            break
+                                if has_ratio:
+                                    continue # Skip this missing field
+                        elif isinstance(actions_data, list):
+                            # Fallback for list-style actions (flat list)
+                            # We search entire list for ratio keys if we can't determine street easily
+                            has_ratio = False
+                            for act in actions_data:
+                                if isinstance(act, dict):
+                                    # Optional: check if act['street'] matches street_key if present
+                                    if any(k in act for k in ["pot_ratio", "amount_ratio", "size_ratio", "ratio", "amount_pct", "size_pct"]):
+                                        has_ratio = True
+                                        break
+                            if has_ratio:
+                                continue
+                
+                final_missing.append(field)
 
                 if final_missing:
                     raise ValueError(f"資訊不足，請補充: {', '.join(map(str, final_missing))}")

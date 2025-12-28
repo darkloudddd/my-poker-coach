@@ -46,8 +46,7 @@ echo.
 echo ⏳ 伺服器啟動中，請稍候...
 echo 🌍 網頁將自動開啟：http://localhost:8000
 
-:: 先開瀏覽器 (等個 3 秒讓 server 起跑)
-start "" "http://localhost:8000"
+:: 伺服器將在啟動後自動開啟瀏覽器
 
 :: 啟動 Server
 uvicorn server:app --reload

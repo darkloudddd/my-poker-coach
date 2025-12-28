@@ -75,14 +75,23 @@ graph LR
     Router -->|Flop| Flop[翻後<br/>strategy/streets/flop.py]
     Router -->|Turn| Turn[轉牌<br/>strategy/streets/turn.py]
     Router -->|River| River[河牌<br/>strategy/streets/river.py]
+
+    subgraph CoreMath [數學核心]
+        direction TB
+        Range[範圍運算引擎<br/>strategy/ranges/*]
+        GTO[GTO 頻率計算<br/>strategy/gto.py]
+    end
     
-    Pre & Flop & Turn & River --> GTO[數學/範圍分析<br/>strategy/gto.py]
-    GTO -->|EV & Freq| Engine
+    Pre & Flop & Turn & River --> Range
+    Range --> GTO
+    GTO -->|Advantage & EV| Engine
     Engine --> Result([建議行動與數據])
 
     classDef default fill:#f5f5f5,stroke:#9e9e9e,stroke-width:1px,color:#333;
     classDef logic fill:#e0f7fa,stroke:#00bcd4,stroke-width:1px,color:#006064;
-    class Pre,Flop,Turn,River,Analyzer,GTO logic;
+    classDef math fill:#fff8e1,stroke:#ffc107,stroke-width:1px,color:#ff6f00;
+    class Pre,Flop,Turn,River,Analyzer logic;
+    class Range,GTO math;
 ```
 
 ### 第三階段：表達 (Expression)

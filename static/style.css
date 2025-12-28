@@ -1,0 +1,967 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+/* --- Google Material Design 3 (Dark Theme) System --- */
+:root {
+    /* Theme: Earthy Khaki/Stone (Muted Warm) */
+
+    /* Primary: Deep Taupe/Umber (Tone-on-tone contrast) */
+    --md-sys-color-primary: #4A453C;
+    --md-sys-color-on-primary: #F0EFE9;
+    --md-sys-color-primary-container: #6B6356;
+    --md-sys-color-on-primary-container: #FDFCF9;
+
+    /* Secondary: Sage Grey */
+    --md-sys-color-secondary: #586361;
+    --md-sys-color-on-secondary: #FFFFFF;
+    --md-sys-color-secondary-container: #DCE6E5;
+    --md-sys-color-on-secondary-container: #151F1E;
+
+    /* Tertiary: Muted Rust (Gentle Accent) */
+    --md-sys-color-tertiary: #7D6356;
+    --md-sys-color-on-tertiary: #FFFFFF;
+
+    /* Backgrounds: Medium Khaki/Beige Base */
+    --md-sys-color-background: #D1CDBF;
+    --md-sys-color-on-background: #2E2C29;
+
+    /* Surface: Lighter Stone */
+    --md-sys-color-surface: #E3E0D6;
+    --md-sys-color-on-surface: #1F1E1B;
+    --md-sys-color-on-surface-variant: #49454F;
+
+    --md-sys-color-surface-container-lowest: #F0EDE5;
+    --md-sys-color-surface-container-low: #EBE8E0;
+    --md-sys-color-surface-container: #E3E0D6;
+    --md-sys-color-surface-container-high: #DBD8CE;
+    --md-sys-color-surface-container-highest: #D3D0C6;
+
+    /* Outlines */
+    --md-sys-color-outline: #77736A;
+    --md-sys-color-outline-variant: #A4A198;
+
+    /* Poker Specific Semantic Colors (4-Color Deck) - Muted for Earth Theme */
+    --poker-spade: #333333;
+    --poker-heart: #B71C1C;
+    /* Darker Red */
+    --poker-club: #2E7D32;
+    --poker-diamond: #1565C0;
+
+    /* Ink Colors */
+    --poker-spade-ink: #1A1A1A;
+    --poker-heart-ink: #B71C1C;
+    --poker-club-ink: #2E7D32;
+    --poker-diamond-ink: #1565C0;
+
+    /* Elevation Shadows (Subtle) */
+    --md-sys-elevation-1: 0px 1px 3px 0px rgba(60, 55, 45, 0.1), 0px 1px 2px 0px rgba(60, 55, 45, 0.2);
+    --md-sys-elevation-2: 0px 2px 6px 2px rgba(60, 55, 45, 0.1), 0px 1px 2px 0px rgba(60, 55, 45, 0.2);
+    --md-sys-elevation-3: 0px 4px 8px 3px rgba(60, 55, 45, 0.1), 0px 1px 3px 0px rgba(60, 55, 45, 0.2);
+    --md-sys-elevation-hover: 0px 6px 10px 4px rgba(60, 55, 45, 0.1), 0px 2px 3px 0px rgba(60, 55, 45, 0.2);
+    --md-sys-elevation-modal: 0px 24px 48px -12px rgba(60, 55, 45, 0.3);
+
+    /* Spacing & Radius */
+    --radius-full: 9999px;
+    --radius-xl: 28px;
+    --radius-l: 24px;
+    --radius-m: 16px;
+    --radius-s: 12px;
+    --radius-xs: 8px;
+
+    /* Animation */
+    --motion-duration-short: 100ms;
+    --motion-duration-medium: 300ms;
+    --motion-easing-standard: cubic-bezier(0.2, 0.0, 0, 1.0);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: var(--md-sys-color-background);
+    color: var(--md-sys-color-on-background);
+    min-height: 100vh;
+    /* Allow scroll if zoomed */
+    height: auto;
+    animation: none;
+    overflow-x: hidden;
+}
+
+/* --- Layout --- */
+.app-container {
+    width: 100%;
+    min-height: 100vh;
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+    overflow-y: auto;
+    /* Handle zoom overflow */
+}
+
+.dashboard-grid {
+    display: grid;
+    /* Responsive Columns */
+    grid-template-columns: minmax(380px, 1fr) minmax(500px, 1.4fr);
+    gap: 24px;
+    height: calc(100vh - 32px);
+    /* Full height minus padding */
+    width: 100%;
+    max-width: 1800px;
+}
+
+/* Tablet / Zoomed View */
+@media (max-width: 1024px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(500px, 60vh) auto;
+        height: auto;
+    }
+
+    .chat-section {
+        height: 600px;
+        /* Fixed height on mobile/tablet */
+    }
+}
+
+/* --- Common Components (Material Card) --- */
+.panel-card,
+.chat-section {
+    background-color: var(--md-sys-color-surface-container);
+    border-radius: var(--radius-l);
+    box-shadow: var(--md-sys-elevation-1);
+    /* Border for definition */
+    border: 1px solid var(--md-sys-color-outline-variant);
+    transition: box-shadow var(--motion-duration-medium) var(--motion-easing-standard), transform var(--motion-duration-medium) var(--motion-easing-standard);
+}
+
+.chat-section {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    z-index: 10;
+}
+
+.controls-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--md-sys-color-outline-variant);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--md-sys-color-outline);
+}
+
+/* --- Chat Section --- */
+.section-header {
+    padding: 24px;
+    background: var(--md-sys-color-surface-container-high);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: var(--md-sys-elevation-1);
+    z-index: 2;
+}
+
+.section-header h2 {
+    font-size: 1.25rem;
+    /* Headline Small */
+    font-weight: 500;
+    color: var(--md-sys-color-on-surface);
+    margin: 0;
+}
+
+.icon-btn {
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--motion-duration-short) var(--motion-easing-standard);
+}
+
+.icon-btn:hover {
+    box-shadow: var(--md-sys-elevation-2);
+    filter: brightness(1.1);
+    transform: scale(1.05);
+    /* Interactive Pop */
+}
+
+/* Chat Area */
+.chat-window {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background: var(--md-sys-color-surface-container-low);
+    /* Darker inset look */
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.message {
+    display: flex;
+    max-width: 85%;
+    flex-direction: column;
+}
+
+.message.user {
+    align-self: flex-end;
+    align-items: flex-end;
+    /* This aligns the bubble to the right */
+}
+
+.message.assistant {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.bubble {
+    padding: 16px 20px;
+    font-size: 1rem;
+    /* Body Large */
+    line-height: 1.6;
+    border-radius: var(--radius-l);
+    position: relative;
+    word-wrap: break-word;
+    box-shadow: var(--md-sys-elevation-1);
+    transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Entry Animation */
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message {
+    animation: messageSlideIn 0.3s ease-out forwards;
+}
+
+.message.user .bubble {
+    background-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    border-bottom-right-radius: 4px;
+    /* Distinct shape */
+}
+
+.message.assistant .bubble {
+    background-color: var(--md-sys-color-surface-container-highest);
+    color: var(--md-sys-color-on-surface);
+    border-bottom-left-radius: 4px;
+    /* Distinct shape */
+}
+
+/* Markdown Content */
+.bubble p {
+    margin-bottom: 0.8em;
+}
+
+.bubble p:last-child {
+    margin-bottom: 0;
+}
+
+.bubble strong {
+    font-weight: 700;
+    color: var(--md-sys-color-primary);
+    /* Use Primary color for bold text */
+}
+
+.bubble em {
+    color: var(--md-sys-color-tertiary);
+    /* Use Tertiary for italics */
+    font-style: normal;
+    /* Keep it normal style but change color, or keep italic? User said "color" */
+}
+
+.bubble ul {
+    margin-left: 1.5em;
+    margin-bottom: 0.8em;
+}
+
+.bubble ul li::marker {
+    color: var(--md-sys-color-secondary);
+    /* Colored bullets */
+}
+
+.bubble code {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.9em;
+}
+
+/* Greeting / Welcome Card styling */
+.greeting-wrapper {
+    background: linear-gradient(to bottom right, #FDFCF9, #F2F0E9);
+    border: 1px solid rgba(74, 69, 60, 0.1);
+    border-radius: var(--radius-l);
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    max-width: 100%;
+}
+
+.greeting-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--md-sys-color-primary);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 2px solid rgba(74, 69, 60, 0.1);
+    padding-bottom: 12px;
+}
+
+.greeting-subtitle {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--md-sys-color-secondary);
+    margin: 16px 0 8px 0;
+}
+
+.greeting-wrapper ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.greeting-wrapper li {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 8px;
+    line-height: 1.5;
+    color: var(--md-sys-color-on-surface);
+}
+
+.greeting-wrapper li::before {
+    content: "•";
+    color: var(--md-sys-color-tertiary);
+    font-weight: bold;
+    position: absolute;
+    left: 8px;
+    top: 0;
+}
+
+.greeting-tip {
+    margin-top: 20px;
+    padding: 12px 16px;
+    background-color: rgba(74, 69, 60, 0.05);
+    /* Subtle primary tint */
+    border-left: 3px solid var(--md-sys-color-tertiary);
+    border-radius: 4px;
+    font-size: 0.95rem;
+    color: var(--md-sys-color-on-surface-variant);
+    font-style: italic;
+}
+
+/* Input Area */
+.input-area {
+    padding: 20px 24px;
+    background: var(--md-sys-color-surface-container);
+    z-index: 2;
+}
+
+#chat-form {
+    background: var(--md-sys-color-surface-container-high);
+    border-radius: var(--radius-xl);
+    /* Pill shape container */
+    padding: 6px 8px 6px 24px;
+    /* Reduced vertical padding slightly since textarea has own padding */
+    display: flex;
+    align-items: center;
+    border: 1px solid transparent;
+    transition: all var(--motion-duration-short);
+    /* Fix alignment of button vs textarea */
+    align-items: flex-end;
+}
+
+#chat-form:focus-within {
+    background: var(--md-sys-color-surface-container-highest);
+    border-color: var(--md-sys-color-primary);
+    box-shadow: 0 0 0 2px rgba(208, 188, 255, 0.3);
+}
+
+#user-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--md-sys-color-on-surface);
+    font-size: 1rem;
+    outline: none;
+    resize: none;
+    max-height: 120px;
+    font-family: 'Roboto', sans-serif;
+    line-height: 1.5;
+    padding: 12px 0;
+    /* Add padding to center text vertically with button */
+}
+
+#send-btn {
+    background: linear-gradient(135deg, var(--md-sys-color-primary), var(--md-sys-color-tertiary));
+    color: var(--md-sys-color-on-primary);
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-size: 1.2rem;
+    box-shadow: var(--md-sys-elevation-2);
+}
+
+#send-btn:hover {
+    background-color: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+    transform: scale(1.1) translateY(-2px);
+    /* Lift effect */
+    box-shadow: 0 4px 12px rgba(74, 69, 60, 0.4);
+    /* Glow */
+}
+
+#send-btn:active {
+    transform: scale(0.95);
+    /* Press effect */
+}
+
+/* --- Right Side Cards --- */
+.panel-card {
+    padding: 28px;
+    position: relative;
+}
+
+.panel-card:hover {
+    /* Subtle lift effect */
+    transform: translateY(-4px);
+    box-shadow: var(--md-sys-elevation-hover);
+}
+
+.state-group h3,
+.panel-card h3 {
+    font-size: 0.875rem;
+    /* Label Large */
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--md-sys-color-secondary);
+    margin-bottom: 16px;
+}
+
+/* 1. Table State (Cards Display) */
+.table-state {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    /* More space between rows */
+    align-items: flex-start;
+    padding-top: 32px;
+    /* Space for clear button */
+}
+
+.clear-pos {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+}
+
+.cards-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    /* Allow wrapping on small screens */
+    width: 100%;
+}
+
+.card-slot {
+    width: 100px;
+    /* Default optimized size */
+    flex: 1 1 80px;
+    /* Grow/Shrink logic */
+    max-width: 130px;
+    aspect-ratio: 2/3;
+    height: auto;
+    border-radius: var(--radius-m);
+    border: 2px dashed var(--md-sys-color-outline-variant);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 700;
+    transition: all 0.2s;
+    background-color: transparent;
+    color: var(--md-sys-color-on-surface-variant);
+    cursor: pointer;
+}
+
+.card-slot:hover {
+    transform: translateY(-4px) scale(1.02);
+    border-color: var(--md-sys-color-primary);
+    box-shadow: var(--md-sys-elevation-2);
+    background-color: rgba(255, 255, 255, 0.5);
+    /* Subtle highlight */
+}
+
+.card-slot:active {
+    transform: scale(0.98);
+}
+
+.card-slot:not(.empty) {
+    background-color: #FAFAFA;
+    /* Light Card Face */
+    border: 1px solid #E0E0E0;
+    border-style: solid;
+    box-shadow: var(--md-sys-elevation-2);
+}
+
+/* Card Suit Colors inside slots */
+.card-slot[data-suit="h"],
+.card-slot[data-suit="d"] {
+    color: var(--md-sys-color-error);
+}
+
+/* Card Suit Colors inside slots & buttons */
+/* Card Suit Colors inside slots (Dark Ink on Light Paper) */
+.card-slot[data-suit="s"],
+.card-slot.suit-s {
+    color: var(--poker-spade-ink);
+}
+
+.card-slot[data-suit="h"],
+.card-slot.suit-h {
+    color: var(--poker-heart-ink);
+}
+
+.card-slot[data-suit="c"],
+.card-slot.suit-c {
+    color: var(--poker-club-ink);
+}
+
+.card-slot[data-suit="d"],
+.card-slot.suit-d {
+    color: var(--poker-diamond-ink);
+}
+
+/* Card Buttons (Light Pastel on Dark Background) */
+.card-btn.suit-s {
+    color: var(--poker-spade);
+}
+
+.card-btn.suit-h {
+    color: var(--poker-heart);
+}
+
+.card-btn.suit-c {
+    color: var(--poker-club);
+}
+
+.card-btn.suit-d {
+    color: var(--poker-diamond);
+}
+
+/* Remove old red/black classes if possible or override */
+.card-btn.suit-s {
+    color: var(--poker-spade);
+}
+
+.card-btn.suit-h {
+    color: var(--poker-heart);
+}
+
+.card-btn.suit-c {
+    color: var(--poker-club);
+}
+
+.card-btn.suit-d {
+    color: var(--poker-diamond);
+}
+
+
+/* Clear Button */
+.action-btn.small {
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--md-sys-color-outline);
+    background: transparent;
+    color: var(--md-sys-color-on-surface);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-btn.small:hover {
+    background: var(--md-sys-color-error-container);
+    color: var(--md-sys-color-on-error-container);
+    border-color: transparent;
+    transform: translateY(-1px);
+    box-shadow: var(--md-sys-elevation-1);
+}
+
+.action-btn.small:active {
+    transform: scale(0.95);
+}
+
+/* 2. Card Picker Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(2px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+    pointer-events: none;
+}
+
+.modal-overlay.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.picker-modal {
+    background: var(--md-sys-color-surface-container-high);
+    padding: 32px;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--md-sys-elevation-modal);
+    max-width: 90vw;
+    /* Responsive max width */
+    width: 850px;
+    /* Fixed optimal width for full keyboard */
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    transform: scale(0.9);
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1.2);
+}
+
+.modal-overlay.open .picker-modal {
+    transform: scale(1);
+}
+
+.picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--md-sys-color-on-surface);
+    font-size: 1.2rem;
+    font-weight: 500;
+}
+
+.close-modal-btn {
+    background: transparent;
+    border: none;
+    color: var(--md-sys-color-on-surface-variant);
+    cursor: pointer;
+    font-size: 1.5rem;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.close-modal-btn:hover {
+    background: var(--md-sys-color-surface-container-highest);
+}
+
+.picker-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.suit-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.suit-label {
+    width: 32px;
+    font-size: 1.8rem;
+    text-align: center;
+}
+
+.suit-label.spade {
+    color: var(--poker-spade);
+}
+
+.suit-label.heart {
+    color: var(--poker-heart);
+}
+
+.suit-label.club {
+    color: var(--poker-club);
+}
+
+.suit-label.diamond {
+    color: var(--poker-diamond);
+}
+
+
+.ranks {
+    display: flex;
+    flex: 1;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.card-btn {
+    width: 46px;
+    /* Optimized for modal */
+    height: 64px;
+    flex: none;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    background: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+    font-size: 1.2rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease-out;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.card-btn small {
+    font-size: 0.7em;
+    margin-top: 2px;
+}
+
+.card-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--md-sys-elevation-2);
+    background: var(--md-sys-color-surface-container-high);
+}
+
+.card-btn:active {
+    transform: scale(0.95);
+}
+
+/* Subtle Background Tints for Buttons */
+.card-btn.suit-s {
+    color: var(--poker-spade);
+    background: linear-gradient(to bottom right, rgba(224, 224, 224, 0.05), transparent);
+}
+
+.card-btn.suit-h {
+    color: var(--poker-heart);
+    background: linear-gradient(to bottom right, rgba(255, 138, 128, 0.08), transparent);
+    border-color: rgba(255, 138, 128, 0.3);
+}
+
+.card-btn.suit-c {
+    color: var(--poker-club);
+    background: linear-gradient(to bottom right, rgba(128, 203, 196, 0.08), transparent);
+    border-color: rgba(128, 203, 196, 0.3);
+}
+
+.card-btn.suit-d {
+    color: var(--poker-diamond);
+    background: linear-gradient(to bottom right, rgba(130, 177, 255, 0.08), transparent);
+    border-color: rgba(130, 177, 255, 0.3);
+}
+
+.card-btn.selected {
+    background: var(--md-sys-color-primary) !important;
+    color: var(--md-sys-color-on-primary) !important;
+    border-color: var(--md-sys-color-primary) !important;
+    box-shadow: var(--md-sys-elevation-2);
+}
+
+/* 3. Strategy Grid */
+.strategy-grid {
+    display: grid;
+    gap: 20px;
+}
+
+.strategy-card {
+    background: var(--md-sys-color-surface-container-high);
+    border-radius: var(--radius-l);
+    padding: 24px;
+    box-shadow: var(--md-sys-elevation-1);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Recommendation Highlight */
+/* Recommendation Highlight */
+.recommend-card {
+    background: linear-gradient(135deg, var(--md-sys-color-primary), var(--md-sys-color-tertiary));
+    color: var(--md-sys-color-on-primary);
+    border: none;
+    box-shadow: var(--md-sys-elevation-2);
+}
+
+.recommend-card .main-action {
+    color: #FFFFFF;
+    /* Force white on dark gradient */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.recommend-card .sub-action {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.recommend-card .action-info {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* Override strategy sub-headers for dark background */
+.recommend-card h3 {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.main-action {
+    font-size: 3rem;
+    /* Display Small */
+    font-weight: 700;
+    color: var(--md-sys-color-on-primary-container);
+    text-align: center;
+    margin: 12px 0 4px;
+    letter-spacing: -0.02em;
+}
+
+.sub-action {
+    text-align: center;
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 1rem;
+}
+
+/* Progress Bars */
+.action-row {
+    margin-bottom: 16px;
+}
+
+.action-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--md-sys-color-on-surface);
+    margin-bottom: 8px;
+}
+
+.progress-bar-bg {
+    height: 12px;
+    background: var(--md-sys-color-surface-container-highest);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+}
+
+/* Action Colors */
+.fill-raise {
+    background-color: #F2B8B5;
+    /* Red */
+}
+
+.fill-bet {
+    background-color: #F9DEDC;
+    /* Light Red/Orange */
+}
+
+.fill-call {
+    background-color: #D0BCFF;
+    /* Primary Purple */
+}
+
+.fill-check {
+    background-color: #BBEBEB;
+    /* Cyan/Teal */
+}
+
+.fill-fold {
+    background-color: #938F99;
+    /* Grey */
+}
+
+/* Math Grid */
+.math-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.math-item {
+    background: var(--md-sys-color-background);
+    padding: 16px;
+    border-radius: var(--radius-m);
+    text-align: center;
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-outline-variant);
+}
+
+.math-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--md-sys-color-secondary);
+    margin-bottom: 6px;
+}
+
+.math-val {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--md-sys-color-on-surface);
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: 600px auto;
+    }
+
+    .table-state {
+        gap: 32px;
+    }
+}

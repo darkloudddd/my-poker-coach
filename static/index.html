@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Poker Coach - GTO 策略教練</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=21">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="dashboard-grid">
+
+            <!-- LEFT COLUMN: Chat & Assistant -->
+            <section class="chat-section">
+                <header class="section-header">
+                    <h2>Poker Coach</h2>
+                    <div class="header-controls">
+                        <button id="reset-btn" class="icon-btn" title="清除記憶並重置">
+                            <i class="fa-solid fa-rotate-right"></i>
+                        </button>
+                    </div>
+                </header>
+
+                <div class="chat-window" id="chat-history">
+                    <div class="message assistant">
+                        <div class="greeting-wrapper">
+                            <div class="greeting-title">
+                                <i class="fa-solid fa-graduation-cap"></i>
+                                <span>AI GTO 撲克教練</span>
+                                <span
+                                    style="font-size:0.8em; font-weight:400; color:var(--md-sys-color-secondary); margin-left:auto;">6-max
+                                    Cash</span>
+                            </div>
+
+                            <div class="greeting-subtitle"><i class="fa-solid fa-list-check"></i> 操作指南</div>
+                            <ul>
+                                <li><strong>輸入建議</strong>：歷史行動盡量輸入完整，方能獲得最精準的建議!</li>
+                                <li><strong>追加提問</strong>：持續對話可針對「當前牌局」深入討論。</li>
+                                <li><strong>重製手牌</strong>：點擊上方 <i class="fa-solid fa-rotate-right"
+                                        style="background:#eee; padding:2px 6px; border-radius:4px; font-size:0.8em;"></i>
+                                    按鈕重置以進行下一手牌。</li>
+                            </ul>
+
+                            <div class="greeting-tip">
+                                <i class="fa-regular fa-lightbulb" style="margin-right:6px;"></i>
+                                Tip: 善用右側選牌器輸入!!!
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <form id="chat-form" style="display:flex; width:100%; gap:10px; align-items:flex-end;">
+                        <textarea id="user-input" placeholder="Message" rows="1"></textarea>
+                        <button type="submit" id="send-btn">
+                            <i class="fa-solid fa-arrow-up"></i>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- RIGHT COLUMN: Table Control & Analysis -->
+            <section class="controls-section">
+
+                <!-- 1. Table State (Visual) -->
+                <!-- 1. Table State (Visual) -->
+                <div class="panel-card table-state">
+                    <button id="clear-cards-btn" class="action-btn small clear-pos">Clear</button>
+
+                    <div class="state-group">
+                        <h3>Board Cards</h3>
+                        <div class="cards-row" id="board-display">
+                            <div class="card-slot empty" data-slot="board-0"></div>
+                            <div class="card-slot empty" data-slot="board-1"></div>
+                            <div class="card-slot empty" data-slot="board-2"></div>
+                            <div class="card-slot empty" data-slot="board-3"></div>
+                            <div class="card-slot empty" data-slot="board-4"></div>
+                        </div>
+                    </div>
+
+                    <div class="state-group">
+                        <h3>Hero Hand</h3>
+                        <div class="cards-row" id="hero-display">
+                            <div class="card-slot empty" data-slot="hero-0"></div>
+                            <div class="card-slot empty" data-slot="hero-1"></div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- 3. Analysis Output -->
+                <div class="strategy-grid" id="strategy-content">
+                    <!-- Dynamic Content -->
+                </div>
+
+            </section>
+
+        </div>
+    </div>
+
+    <!-- Modal Picker Overlay (Moved to root) -->
+    <div class="modal-overlay" id="picker-modal">
+        <div class="picker-modal">
+            <div class="picker-header">
+                <span>選擇一張牌</span>
+                <button class="close-modal-btn" id="close-modal-btn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="picker-grid">
+                <div class="suit-row">
+                    <span class="suit-label spade">♠</span>
+                    <div class="ranks" data-suit="s"></div>
+                </div>
+                <div class="suit-row">
+                    <span class="suit-label heart">♥</span>
+                    <div class="ranks" data-suit="h"></div>
+                </div>
+                <div class="suit-row">
+                    <span class="suit-label club">♣</span>
+                    <div class="ranks" data-suit="c"></div>
+                </div>
+                <div class="suit-row">
+                    <span class="suit-label diamond">♦</span>
+                    <div class="ranks" data-suit="d"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="script.js?v=9"></script>
+</body>
+
+</html>

@@ -89,4 +89,4 @@ elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
 fi
 
 # Start Server
-"$VENV_PYTHON" -m uvicorn server:app --reload --port "$SERVER_PORT"
+"$VENV_PYTHON" -u -m uvicorn server:app --reload --port "$SERVER_PORT"

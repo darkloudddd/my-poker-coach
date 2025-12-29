@@ -3,7 +3,7 @@ setlocal
 chcp 65001 >nul
 
 echo ==========================================
-echo 🃏 My Poker Coach - 一鍵啟動腳本 🚀
+echo 🃏 My Poker Coach - 一鍵啟動 🚀
 echo ==========================================
 echo.
 
@@ -33,7 +33,7 @@ echo [1/3] 檢查並設定虛擬環境 (.venv)... 🛠️
 if not exist .venv (
     echo ℹ️  正在建立虛擬環境...
     %PYTHON_CMD% -m venv .venv
-    if %errorlevel% neq 0 (
+    if errorlevel 1 (
         echo ❌ 建立虛擬環境失敗。
         pause
         exit /b
@@ -47,7 +47,7 @@ set VENV_PYTHON=.venv\Scripts\python.exe
 :: 2. 安裝套件 (使用虛擬環境)
 echo [2/3] 正在虛擬環境中檢查並安裝套件... 📦
 "%VENV_PYTHON%" -m pip install -r requirements.txt >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ❌ 套件安裝失敗。
     pause
     exit /b
@@ -95,6 +95,6 @@ echo 🌍 網頁將自動開啟：http://localhost:%SERVER_PORT%
 :: 伺服器將在啟動後自動開啟瀏覽器
 
 :: 啟動 Server (使用虛擬環境)
-"%VENV_PYTHON%" -m uvicorn server:app --reload --port %SERVER_PORT%
+"%VENV_PYTHON%" -u -m uvicorn server:app --reload --port %SERVER_PORT%
 
 pause

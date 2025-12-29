@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo ==========================================
-echo 🃏 My Poker Coach - Launcher 🚀 
+echo *** My Poker Coach - Launcher *** 
 echo ==========================================
 echo.
 
@@ -18,7 +18,7 @@ echo Using Python command: %PYTHON_CMD%
 echo.
 
 :: 1. Setup Venv
-echo 🔍 1. Checking virtual environment...
+echo [*] 1. Checking virtual environment...
 if not exist .venv (
     echo   Creating .venv...
     %PYTHON_CMD% -m venv .venv
@@ -28,18 +28,18 @@ if not exist .venv (
 
 :: 2. Install Dependencies
 echo.
-echo 📦 2. Installing dependencies...
+echo [+] 2. Installing dependencies...
 .venv\Scripts\python.exe -m pip install -r requirements.txt >nul 2>&1
 if errorlevel 1 (
     echo   [ERROR] Install failed.
     pause
     exit /b
 )
-echo ✅ Dependencies ready!
+echo [OK] Dependencies ready!
 
 :: 3. Setup .env
 echo.
-echo ⚙️ 3. Checking configuration...
+echo [*] 3. Checking configuration...
 if not exist .env (
     echo   Creating .env from example...
     copy .env.example .env >nul
@@ -52,8 +52,8 @@ if not exist .env (
 
 :: 4. Start Server
 echo.
-echo 🚀 4. Starting Server on Port 8000...
-echo 🌍 Opening browser...
+echo [>>] 4. Starting Server on Port 8000...
+echo [o] Opening browser...
 start http://localhost:8000
 
 .venv\Scripts\python.exe -u -m uvicorn server:app --reload --port 8000

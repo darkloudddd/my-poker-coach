@@ -5,24 +5,46 @@
 系統宏觀資料流向與三階段處理流程。用戶可透過 Web UI (static/) 或直接呼叫 API。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e8f5e9', 'primaryTextColor': '#2e7d32', 'primaryBorderColor': '#a5d6a7', 'lineColor': '#4caf50', 'edgeLabelBackground': '#ffffff', 'tertiaryColor': '#fff'}}}%%
-graph LR
-    User([用戶輸入]) --> UI[Web UI<br/>static/index.html]
-    UI -->|POST /chat| Server[API 伺服器<br/>server.py]
+sequenceDiagram
+    participant User as 👤 User (Input)
+    participant Agent as 🤖 Agent (Controller)
+    participant Parser as 🧩 Parser (features.py)
+    participant Engine as ⚙️ Strategy Engine
+    participant Context as 📚 Range Context
+    participant LLM as 🧠 LLM (Chat)
+
+    User->>Agent: 輸入牌局 (e.g., "BTN open, BB call, Flop K72")
     
-    Server --> P[Phase 1: 感知<br/>features/context.py]
-    P --> C[Phase 2: 認知<br/>strategy/engine.py]
-    C --> E[Phase 3: 表達<br/>agent.py]
+    rect rgb(200, 240, 255)
+    Note over Agent, Parser: 階段一：感知與解析
+    Agent->>Parser: 解析自然語言
+    Parser-->>Agent: 輸出標準化特徵 (JSON Features)
+    end
+
+    rect rgb(255, 230, 200)
+    Note over Agent, Engine: 階段二：策略運算 (纯數學)
+    Agent->>Engine: 請求策略 (recommend_action)
     
-    E --> Server
-    Server -->|JSON 回應| UI
-    UI -->|呈現建議| User
+    Engine->>Context: 1. 讀取 GTO 範圍 (ensure_range_math_data)
+    Context->>Context: 根據位置與行動過濾範圍 (Range Capping)
+    Context-->>Engine: 回傳範圍優勢數據 (Advantage, Nut Adv)
     
-    %% Style Reference: Green/Grey Professional Flowchart
-    classDef default fill:#f1f8e9,stroke:#558b2f,stroke-width:1px,rx:5,ry:5,color:#33691e;
-    classDef phase fill:#e0f2f1,stroke:#00695c,stroke-width:2px,color:#004d40;
-    class P,C,E phase;
-    class User,UI,Server default;
+    Engine->>Engine: 2. 執行 Solver 決策樹 (MDF, Geometric Sizing)
+    Engine-->>Agent: 回傳完整策略結果 (含 math_data)
+    end
+
+    rect rgb(220, 255, 220)
+    Note over Agent, LLM: 階段三：表達與防幻覺 (本次強化重點)
+    Agent->>Agent: 🔍 數據注入 (Data Injection)
+    Note right of Agent: 將範圍前五名 (Top 5 Combos)<br/>與範例手牌 (Example Hands)<br/>格式化為文字
+    
+    Agent->>LLM: 構建 Prompt (COACH_SYSTEM_PROMPT)
+    Note right of LLM: 🛡️ Prompt 限制：<br/>1. 嚴禁違背 Solver 建議<br/>2. 嚴禁 River 聽牌幻覺<br/>3. 強制引用範圍數據
+    
+    LLM-->>Agent: 生成自然語言建議
+    end
+
+    Agent->>User: 顯示最終建議 (Markdown)
 ```
 
 ---
@@ -35,84 +57,91 @@ graph LR
 負責將自然語言轉換為結構化數據。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fcfcfc', 'primaryTextColor': '#333', 'lineColor': '#666', 'edgeLabelBackground': '#ffffff'}}}%%
-graph LR
-    Input[用戶訊息] --> Parser[Context Parser<br/>features/context.py]
+sequenceDiagram
+    participant User as 👤 User
+    participant Parser as 🧩 Parser (context.py)
+    participant Prompts as 📝 Prompts
+    participant LLM as 🧠 LLM (Extractor)
+    participant Core as 🧹 Core Parser
+
+    User->>Parser: 輸入自然語言
     
-    subgraph Loops [解析循環]
-        direction TB
-        Parser -->|Prompt| PromptCfg[Prompts<br/>services/prompts.py]
-        PromptCfg --> LLM{{LLM 擷取器<br/>services/llm_client.py}}
-        LLM -->|JSON| Parser
-        Parser -->|標準化| Core[core/parser.py]
-        Core -->|Clean Data| Parser
+    loop Extraction Loop
+        Parser->>Prompts: 取得 EXTRACTOR_PROMPT
+        
+        rect rgb(255, 220, 220)
+        Note right of LLM: ⚠️ 外部 AI 呼叫 (Extraction)
+        Parser->>LLM: 請求解析 (JSON Mode)
+        LLM-->>Parser: 回傳 JSON 結構
+        end
+        
+        Parser->>Core: 數據清洗與標準化
+        Core-->>Parser: 標準化數據
     end
     
-    Parser --> Validator{規則/限制驗證}
-    Validator -->|Pass| Output([結構化牌局狀態])
-    Validator -->|Fail| Error([錯誤回覆])
-
-    %% Style: Green Headers, Grey Body
-    classDef default fill:#f5f5f5,stroke:#9e9e9e,stroke-width:1px,color:#333;
-    classDef llm fill:#e8f5e9,stroke:#4caf50,stroke-width:2px,color:#2e7d32;
-    classDef core fill:#fff3e0,stroke:#ff9800,stroke-width:1px,color:#e65100;
-    class LLM llm;
-    class Core core;
+    alt Validation Success
+        Parser-->>User: 輸出結構化狀態 (Game State)
+    else Validation Fail
+        Parser-->>User: 回傳錯誤訊息 (請重試)
+    end
 ```
 
 ### 第二階段：認知 (Cognition)
 負責策略運算與 GTO 查詢。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fcfcfc', 'primaryTextColor': '#333', 'lineColor': '#666', 'edgeLabelBackground': '#ffffff'}}}%%
-graph LR
-    State([結構化狀態]) --> Engine[策略引擎<br/>strategy/engine.py]
-    
-    Engine --> Analyzer[牌力/面板分析<br/>strategy/utils.py]
-    
-    Engine --> Router{依街道路由}
-    Router -->|Preflop| Pre[翻前<br/>strategy/streets/preflop.py]
-    Router -->|Flop| Flop[翻後<br/>strategy/streets/flop.py]
-    Router -->|Turn| Turn[轉牌<br/>strategy/streets/turn.py]
-    Router -->|River| River[河牌<br/>strategy/streets/river.py]
+sequenceDiagram
+    participant State as 📥 Game State
+    participant Engine as ⚙️ Strategy Engine
+    participant Street as 🛣️ Street Logic (Flop/Turn...)
+    participant Context as 📚 Range Context
+    participant GTO as 📐 GTO Math
 
-    subgraph CoreMath [數學核心]
-        direction TB
-        Range[範圍運算引擎<br/>strategy/ranges/*]
-        GTO[GTO 頻率計算<br/>strategy/gto.py]
+    State->>Engine: 傳入牌局狀態
+    Engine->>Engine: 基礎牌力/SPR 計算
+    
+    Engine->>Street: 路由至對應街道 (e.g., recommend_flop)
+    
+    rect rgb(255, 250, 240)
+    Note over Street, GTO: 核心運算區
+    Street->>Context: 1. 確保範圍數據 (ensure_range_math)
+    Context->>Context: 讀取並過濾 GTO 範圍
+    Context-->>Street: 回傳範圍優勢/Nut Advantage
+    
+    Street->>GTO: 2. 計算頻率 (MDF, Bluff Ratio)
+    GTO-->>Street: 回傳行動頻率
     end
     
-    Pre & Flop & Turn & River --> Range
-    Range --> GTO
-    GTO -->|Advantage & EV| Engine
-    Engine --> Result([建議行動與數據])
-
-    classDef default fill:#f5f5f5,stroke:#9e9e9e,stroke-width:1px,color:#333;
-    classDef logic fill:#e0f7fa,stroke:#00bcd4,stroke-width:1px,color:#006064;
-    classDef math fill:#fff8e1,stroke:#ffc107,stroke-width:1px,color:#ff6f00;
-    class Pre,Flop,Turn,River,Analyzer logic;
-    class Range,GTO math;
+    Street-->>Engine: 彙整策略矩陣
+    Engine-->>State: 輸出完整策略數據
 ```
 
 ### 第三階段：表達 (Expression)
 負責生成人性化的教練建議。
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fcfcfc', 'primaryTextColor': '#333', 'lineColor': '#666', 'edgeLabelBackground': '#ffffff'}}}%%
-graph LR
-    Data([策略數據]) --> Agent[教練代理<br/>agent.py]
-    
-    Agent --> Inject{數據注入<br/>Data Injection}
-    Inject -->|範圍組成 &<br/>範例手牌| Gen[Prompt 組裝<br/>services/prompts.py]
-    
-    Gen -->|Strict Context| Coach{{LLM 教練<br/>services/llm_client.py}}
-    Coach -->|自然語言| Agent
-    
-    Agent --> Final([最終建議])
+sequenceDiagram
+    participant Data as 📊 Strategy Data
+    participant Agent as 🤖 Agent
+    participant Prompts as 📝 Prompts (System)
+    participant LLM as 🧠 LLM (Coach)
 
-    classDef default fill:#f5f5f5,stroke:#9e9e9e,stroke-width:1px,color:#333;
-    classDef llm fill:#e8f5e9,stroke:#4caf50,stroke-width:2px,color:#2e7d32;
-    class Coach llm;
+    Data->>Agent: 接收策略運算結果
+    
+    Agent->>Agent: 🔍 數據注入 (Data Injection)
+    Note right of Agent: 將範圍(Range)與範例手牌(Combos)<br/>轉化為自然語言描述
+    
+    Agent->>Prompts: 取得 COACH_PROMPT
+    Prompts-->>Agent: 回傳 Prompt Template
+    
+    rect rgb(255, 220, 220)
+    Note right of LLM: ⚠️ 外部 AI 呼叫 (Coaching)
+    Agent->>LLM: 發送最終 Prompt (含注入數據)
+    Note right of LLM: 遵循防幻覺指令進行回答
+    
+    LLM-->>Agent: 生成教練建議 (Markdown)
+    end
+    Agent-->>Data: 輸出最終回應
 ```
 
 ---

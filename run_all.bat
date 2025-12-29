@@ -52,10 +52,18 @@ if not exist .env (
 
 :: 4. Start Server
 echo.
-echo [>>] 4. Starting Server on Port 8000...
-echo [o] Opening browser...
-start http://localhost:8000
+echo [^>^>] 4. Starting Server...
+echo.
 
-.venv\Scripts\python.exe -u -m uvicorn server:app --reload --port 8000
+:: 直接執行 server.py，由它負責找 Port 與開瀏覽器
+.venv\Scripts\python.exe server.py
 
-pause
+:: 檢查 Python 的 Exit Code
+if errorlevel 1 (
+    echo.
+    echo [!] Server crashed or exited with error.
+    pause
+) else (
+    echo.
+    echo [OK] Server shutdown gracefully.
+)

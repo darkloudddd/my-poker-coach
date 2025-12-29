@@ -6,12 +6,10 @@ def find_free_port(start_port=8000, max_port=8010):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.bind(("0.0.0.0", port))
-                print(port)
-                return
+                return port
             except OSError:
                 continue
-    print("None")
-    sys.exit(1)
+    return None
 
 if __name__ == "__main__":
     find_free_port()

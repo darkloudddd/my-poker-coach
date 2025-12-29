@@ -7,8 +7,10 @@
     <title>AI Poker Coach - GTO 策略教練</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=21">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Oswald:wght@500;700&family=Roboto:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=40">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -20,7 +22,13 @@
             <!-- LEFT COLUMN: Chat & Assistant -->
             <section class="chat-section">
                 <header class="section-header">
-                    <h2>Poker Coach</h2>
+                    <div class="header-branding">
+                        <div class="logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                        <div class="title-group">
+                            <h1 class="app-title">POKER COACH</h1>
+                            <span class="app-subtitle">GTO STRATEGY ASSISTANT</span>
+                        </div>
+                    </div>
                     <div class="header-controls">
                         <button id="reset-btn" class="icon-btn" title="清除記憶並重置">
                             <i class="fa-solid fa-rotate-right"></i>
@@ -97,13 +105,23 @@
 
                 <!-- 3. Analysis Output -->
                 <div class="strategy-grid" id="strategy-content">
-                    <!-- Dynamic Content -->
+                    <div class="empty-state">
+                        <div class="empty-icon"><i class="fa-solid fa-chart-pie"></i></div>
+                        <h3>等待局勢分析...</h3>
+                        <p>請在左側輸入手牌與行動，<br>AI教練將在此處顯示即時策略建議。</p>
+                    </div>
                 </div>
 
             </section>
 
         </div>
     </div>
+
+    <!-- Floating Shutdown Button -->
+    <button id="fixed-shutdown-btn" class="floating-shutdown-btn" title="關閉系統">
+        <i class="fa-solid fa-power-off"></i>
+        <span>OFF</span>
+    </button>
 
     <!-- Modal Picker Overlay (Moved to root) -->
     <div class="modal-overlay" id="picker-modal">
@@ -136,7 +154,7 @@
     <!-- Scripts -->
     <!-- Markdown Parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="script.js?v=9"></script>
+    <script src="script.js?v=41"></script>
 </body>
 
 </html>

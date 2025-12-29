@@ -79,15 +79,48 @@
     padding: 0;
 }
 
+/* --- Google Material Design 3 (Dark Theme) System --- */
+/* Font Imports are in HTML */
+
+/* Updated Font Imports are in HTML */
+
 body {
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Roboto', 'Noto Sans TC', sans-serif;
+    /* Added Chinese Font */
     background-color: var(--md-sys-color-background);
     color: var(--md-sys-color-on-background);
     min-height: 100vh;
-    /* Allow scroll if zoomed */
     height: auto;
     animation: none;
     overflow-x: hidden;
+}
+
+/* ... existing styles ... */
+
+.main-action {
+    font-family: 'Oswald', sans-serif;
+    /* Strong Display Font */
+    font-size: 3.5rem;
+    /* Slightly larger */
+    font-weight: 700;
+    color: var(--md-sys-color-on-primary-container);
+    text-align: center;
+    margin: 8px 0 4px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.card-header,
+h1,
+h2,
+h3 {
+    font-family: 'Roboto', 'Noto Sans TC', sans-serif;
+}
+
+/* Specific styling for the large header */
+header h1 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
 }
 
 /* --- Layout --- */
@@ -194,14 +227,18 @@ body {
     background: var(--md-sys-color-secondary-container);
     color: var(--md-sys-color-on-secondary-container);
     border: none;
-    width: 40px;
-    height: 40px;
+    width: 46px;
+    /* Increased from 40px */
+    height: 46px;
+    /* Increased from 40px */
     border-radius: var(--radius-full);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all var(--motion-duration-short) var(--motion-easing-standard);
+    font-size: 1.1rem;
+    /* Slightly larger icon */
 }
 
 .icon-btn:hover {
@@ -209,6 +246,11 @@ body {
     filter: brightness(1.1);
     transform: scale(1.05);
     /* Interactive Pop */
+}
+
+.shutdown-btn:hover {
+    background: var(--md-sys-color-error-container);
+    color: var(--md-sys-color-on-error-container);
 }
 
 /* Chat Area */
@@ -466,11 +508,7 @@ body {
     position: relative;
 }
 
-.panel-card:hover {
-    /* Subtle lift effect */
-    transform: translateY(-4px);
-    box-shadow: var(--md-sys-elevation-hover);
-}
+/* .panel-card:hover removed as per user request */
 
 .state-group h3,
 .panel-card h3 {
@@ -611,14 +649,15 @@ body {
     color: var(--poker-diamond);
 }
 
-
 /* Clear Button */
 .action-btn.small {
-    padding: 8px 16px;
+    padding: 8px 18px;
     border-radius: var(--radius-full);
-    border: 1px solid var(--md-sys-color-outline);
-    background: transparent;
-    color: var(--md-sys-color-on-surface);
+    border: 1px solid var(--md-sys-color-outline-variant);
+    background: var(--md-sys-color-surface-container-highest);
+    /* Added background */
+    color: var(--md-sys-color-primary);
+    /* Use primary color for text */
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
@@ -785,7 +824,9 @@ body {
 /* Subtle Background Tints for Buttons */
 .card-btn.suit-s {
     color: var(--poker-spade);
-    background: linear-gradient(to bottom right, rgba(224, 224, 224, 0.05), transparent);
+    background: linear-gradient(to bottom right, rgba(144, 164, 174, 0.15), transparent);
+    /* Blue Grey */
+    border-color: rgba(144, 164, 174, 0.3);
 }
 
 .card-btn.suit-h {
@@ -857,13 +898,17 @@ body {
 }
 
 .main-action {
-    font-size: 3rem;
-    /* Display Small */
+    font-family: 'Oswald', sans-serif;
+    /* Strong Display Font */
+    font-size: 3.5rem;
+    /* Slightly larger */
     font-weight: 700;
     color: var(--md-sys-color-on-primary-container);
     text-align: center;
-    margin: 12px 0 4px;
-    letter-spacing: -0.02em;
+    margin: 8px 0 4px;
+    letter-spacing: 0.05em;
+    /* Wider spacing for Oswald */
+    text-transform: uppercase;
 }
 
 .sub-action {
@@ -964,4 +1009,209 @@ body {
     .table-state {
         gap: 32px;
     }
+}
+
+/* --- Floating Shutdown Button --- */
+.floating-shutdown-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: linear-gradient(135deg, #b71c1c, #8a0000);
+    /* Darker Red (Poker Heart/Error) */
+    color: rgba(255, 255, 255, 0.9);
+    border: none;
+    border-radius: 28px;
+    /* Pill shape */
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    /* Subtler shadow */
+    cursor: pointer;
+    font-size: 0.9rem;
+    /* Slightly smaller text */
+    font-weight: 500;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    opacity: 0.4;
+    /* High transparency when idle */
+}
+
+.floating-shutdown-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 16px rgba(183, 28, 28, 0.4);
+    opacity: 1;
+    /* Full visibility on hover */
+    background: linear-gradient(135deg, #d32f2f, #b71c1c);
+    /* Brighter on hover */
+}
+
+.floating-shutdown-btn:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 6px rgba(198, 40, 40, 0.3);
+}
+
+.floating-shutdown-btn i {
+    font-size: 1.2rem;
+}
+
+.floating-shutdown-btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    box-shadow: none;
+    opacity: 0.7;
+}
+
+/* --- Animations --- */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse-soft {
+    0% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+}
+
+/* Staggered Entry */
+.chat-section {
+    animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.panel-card {
+    animation: fadeInUp 0.5s ease-out 0.1s forwards;
+    opacity: 0;
+    /* Initial state hidden */
+}
+
+.strategy-grid {
+    animation: fadeInUp 0.5s ease-out 0.2s forwards;
+    opacity: 0;
+    /* Initial state hidden */
+}
+
+/* Empty State - Polished */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 280px;
+    text-align: center;
+    /* Card Style */
+    background: var(--md-sys-color-surface-container-low);
+    /* Distinct card background */
+    border-radius: var(--radius-l);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.05);
+    /* Inner depth */
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    margin-top: 0;
+    padding: 40px;
+    opacity: 0.8;
+}
+
+.empty-icon {
+    font-size: 3.5rem;
+    margin-bottom: 24px;
+    color: var(--md-sys-color-surface-variant);
+    /* More subtle icon color */
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+}
+
+.empty-state h3 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin-bottom: 12px;
+
+    color: var(--md-sys-color-on-surface);
+    letter-spacing: 0.05em;
+}
+
+.empty-state p {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--md-sys-color-secondary);
+    max-width: 300px;
+}
+
+/* --- Granular Animations --- */
+
+/* 1. Greeting List Stagger */
+.greeting-wrapper li {
+    opacity: 0;
+    animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.greeting-wrapper li:nth-child(1) {
+    animation-delay: 0.4s;
+}
+
+.greeting-wrapper li:nth-child(2) {
+    animation-delay: 0.5s;
+}
+
+.greeting-wrapper li:nth-child(3) {
+    animation-delay: 0.6s;
+}
+
+.greeting-title {
+    opacity: 0;
+    animation: fadeInUp 0.5s ease-out 0.3s forwards;
+}
+
+/* 2. Card Slots Stagger */
+.card-slot {
+    opacity: 0;
+    animation: fadeInUp 0.4s ease-out forwards;
+}
+
+/* Board Cards 0-4 */
+#board-display .card-slot:nth-child(1) {
+    animation-delay: 0.2s;
+}
+
+#board-display .card-slot:nth-child(2) {
+    animation-delay: 0.25s;
+}
+
+#board-display .card-slot:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+#board-display .card-slot:nth-child(4) {
+    animation-delay: 0.35s;
+}
+
+#board-display .card-slot:nth-child(5) {
+    animation-delay: 0.4s;
+}
+
+/* Hero Hand 0-1 */
+#hero-display .card-slot:nth-child(1) {
+    animation-delay: 0.45s;
+}
+
+#hero-display .card-slot:nth-child(2) {
+    animation-delay: 0.5s;
 }

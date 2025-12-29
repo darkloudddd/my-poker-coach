@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatHistory = document.getElementById('chat-history');
     const resetBtn = document.getElementById('reset-btn');
     const strategyContent = document.getElementById('strategy-content');
+    const sendBtn = document.getElementById('send-btn'); // FIXED: Add missing definition
 
     // --- Card Selector Elements ---
     const clearCardsBtn = document.getElementById('clear-cards-btn');
@@ -68,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeModalBtn = document.getElementById('close-modal-btn');
 
     function openPicker(slot) {
-        console.log('Opening picker for slot:', slot);
+
         currentSlot = slot;
         // Highlight active slot visual
         document.querySelectorAll('.card-slot').forEach(s => s.classList.remove('active'));
@@ -89,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     [...heroSlots, ...boardSlots].forEach(slot => {
-        console.log('Attaching click listener to:', slot);
+
         slot.addEventListener('click', () => openPicker(slot));
     });
 
@@ -98,10 +99,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!currentSlot) return;
 
         // Check availability
-        const existingSlot = [...selectedCardMap.entries()].find(([k, v]) => v === cardVal);
-        if (existingSlot && existingSlot[0] !== currentSlot.dataset.slot) {
-            alert('這張牌已經選過了！');
-            return;
+        const existingSlotEntry = [...selectedCardMap.entries()].find(([k, v]) => v === cardVal);
+        if (existingSlotEntry && existingSlotEntry[0] !== currentSlot.dataset.slot) {
+            // Already selected elsewhere: Steal it! (Better UX)
+            const oldSlotId = existingSlotEntry[0];
+            const oldSlot = [...heroSlots, ...boardSlots].find(s => s.dataset.slot === oldSlotId);
+            if (oldSlot) {
+                clearSlot(oldSlot);
+            }
+            selectedCardMap.delete(oldSlotId);
         }
 
         // Fill Slot
@@ -156,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (keepOpen) {
                 // Update internal pointer for next click
                 currentSlot = nextSlot;
-                console.log('Auto-advancing to:', currentSlot.dataset.slot);
+
             }
         }
     }
@@ -269,9 +275,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Chat Logic ---
 
+    const EMPTY_STATE_HTML = `
+        <div class="empty-state">
+            <div class="empty-icon"><i class="fa-solid fa-chart-pie"></i></div>
+            <h3>等待局勢分析...</h3>
+            <p>請在左側輸入手牌與行動，<br>AI教練將在此處顯示即時策略建議。</p>
+        </div>
+    `;
+
+    // Request Generation Counter to prevent race conditions
+    let currentGeneration = 0;
+
+    // Reset Game
     // Reset Game
     resetBtn.addEventListener('click', async () => {
         if (!confirm('確定要清除當前記憶並開始新牌局嗎？')) return;
+
+        // Invalidate any pending requests
+        currentGeneration++;
+
+        // Stop any ongoing thinking immediately
+        stopPolling();
+
+        // Ensure inputs are unlocked and focused for new round
+        userInput.disabled = false;
+        sendBtn.disabled = false;
+        userInput.focus();
+
+        resetBtn.disabled = true; // Disable to prevent double click
+        resetBtn.classList.add('disabled-btn');
 
         try {
             const res = await fetch('/reset', { method: 'POST' });
@@ -279,24 +311,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 chatHistory.innerHTML = `
                     <div class="message assistant">
                         <div class="bubble">
-                            <p>🧹 記憶已清除，請輸入新牌局。</p>
+                            <p>🧹 記憶已清除,請輸入新牌局。</p>
                         </div>
                     </div>
                 `;
-                strategyContent.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-chart-pie"></i>
-                        <p>尚無分析數據</p>
-                    </div>
-                `;
+                strategyContent.innerHTML = EMPTY_STATE_HTML;
                 // Also clear selections
                 selectedCardMap.clear();
                 [...heroSlots, ...boardSlots].forEach(slot => { slot.className = 'card-slot empty'; slot.innerHTML = ''; });
+            } else {
+                console.error('Reset failed with status:', res.status);
+                alert('重置失敗，請稍後再試。');
             }
         } catch (err) {
             console.error('Reset failed', err);
+            alert('重置發生錯誤: ' + err.message);
+        } finally {
+            resetBtn.disabled = false;
+            resetBtn.classList.remove('disabled-btn');
         }
     });
+
+    // Shutdown System
+    const shutdownBtn = document.getElementById('fixed-shutdown-btn');
+    if (shutdownBtn) {
+        shutdownBtn.addEventListener('click', async () => {
+            if (!confirm('確定要關閉系統嗎？\n(伺服器將停止運作，視窗將無法再連線)')) return;
+
+            try {
+                // UI Feedback immediately
+                shutdownBtn.disabled = true;
+                addMessage('assistant', '🛑 正在關閉系統...');
+
+                await fetch('/shutdown', { method: 'POST' });
+
+                // Keep showing message
+                setTimeout(() => {
+                    alert('伺服器已關閉，請直接關閉此瀏覽器分頁。');
+                    window.close(); // Try to close tab (may be blocked)
+                }, 500);
+
+            } catch (err) {
+                console.error('Shutdown request failed', err);
+                addMessage('assistant', '❌ 關閉失敗，請手動關閉視窗。');
+                shutdownBtn.disabled = false;
+            }
+        });
+    }
 
     // Submit Form
     chatForm.addEventListener('submit', async (e) => {
@@ -334,17 +395,36 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show Loading
         const loadingId = addLoadingIndicator();
 
+        // 1. Disable Inputs
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+
         try {
+            // Capture generation
+            const requestGen = currentGeneration;
+
             const response = await fetch('/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: fullMessage })
             });
 
+            // Check generation validity
+            if (requestGen !== currentGeneration) {
+                console.log('Ignore stale response');
+                removeMessage(loadingId);
+                return;
+            }
+
             const data = await response.json();
 
             // Remove Loading
             removeMessage(loadingId);
+
+            if (data.error) {
+                addMessage('assistant', data.error);
+                return;
+            }
 
             // Add Assistant Message
             if (data.advice) {
@@ -357,11 +437,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // Sync Visual State (Important for follow-up questions)
             syncVisualState(data.game_state);
 
+            // No need to poll since we got the response synchronously
+
 
         } catch (err) {
             removeMessage(loadingId);
             addMessage('assistant', '❌ 發生錯誤，請稍後再試。');
             console.error(err);
+        } finally {
+            // Re-enable Inputs
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            setTimeout(() => userInput.focus(), 50); // Restore focus
         }
     });
 
@@ -406,10 +493,20 @@ document.addEventListener('DOMContentLoaded', () => {
         html += '<div class="strategy-grid">';
 
         // 1. Recommendation (Left Side or Top)
+        // 1. Recommendation (Left Side or Top)
         if (strategy && strategy.recommended_action) {
             const amountStr = strategy.amount > 0 ? strategy.amount.toFixed(1) + ' BB' : '';
+            const actionLower = strategy.recommended_action.toLowerCase();
+
+            let actionClass = '';
+            if (actionLower.includes('raise') || actionLower.includes('all')) actionClass = 'action-raise';
+            else if (actionLower.includes('bet')) actionClass = 'action-bet';
+            else if (actionLower.includes('call')) actionClass = 'action-call';
+            else if (actionLower.includes('check')) actionClass = 'action-check';
+            else if (actionLower.includes('fold')) actionClass = 'action-fold';
+
             html += `
-                <div class="strategy-card recommend-card">
+                <div class="strategy-card recommend-card ${actionClass}">
                     <div class="card-header">
                         <i class="fa-solid fa-star"></i> 最佳行動
                     </div>
@@ -490,4 +587,183 @@ document.addEventListener('DOMContentLoaded', () => {
 
         strategyContent.innerHTML = html;
     }
+
+    function parseUserMessage(fullText) {
+        // Regex to extract cards: "Hero holds AhKh. Board is 7s8d9c. user_text"
+        // Also handle cases with only Hero or only Board
+        // Try to match standard prefix pattern
+        const heroRegex = /Hero holds ([A-Za-z0-9]+)\./;
+        const boardRegex = /Board is ([A-Za-z0-9]+)\./;
+
+        let heroCards = [];
+        let boardCards = [];
+        let cleanText = fullText;
+
+        const heroMatch = fullText.match(heroRegex);
+        if (heroMatch) {
+            // Split by 2 chars (e.g. AsKs -> [As, Ks])
+            // Matches every 2 chars
+            heroCards = heroMatch[1].match(/.{1,2}/g) || [];
+            cleanText = cleanText.replace(heroMatch[0], '');
+        }
+
+        const boardMatch = fullText.match(boardRegex);
+        if (boardMatch) {
+            boardCards = boardMatch[1].match(/.{1,2}/g) || [];
+            cleanText = cleanText.replace(boardMatch[0], '');
+        }
+
+        cleanText = cleanText.trim();
+        // If empty after trim (only card update), default to update msg
+        if (!cleanText) cleanText = "🃏 (更新手牌狀態)";
+
+        return {
+            heroCards,
+            boardCards,
+            cleanText
+        };
+    }
+
+    async function restoreState() {
+        try {
+            const res = await fetch('/state');
+            if (!res.ok) return;
+            const data = await res.json();
+
+            // Store parsed cards from the *latest* user message to handle pending state restoration
+            let pendingHeroCards = [];
+            let pendingBoardCards = [];
+
+            // 1. Restore Chat History
+            let lastMsgRole = null;
+            if (data.chat_history && data.chat_history.length > 0) {
+                // Clear default greeting/content ONLY if we have history to show
+                chatHistory.innerHTML = '';
+
+                // Check if last message is user (Pending state)
+                lastMsgRole = data.chat_history[data.chat_history.length - 1].role;
+
+                data.chat_history.forEach(msg => {
+                    let content = msg.content;
+                    if (msg.role === 'assistant') {
+                        content = formatResponse(content);
+                    } else {
+                        // For user, parse and clean
+                        const parsed = parseUserMessage(content);
+                        content = parsed.cleanText;
+
+                        // Keep track of latest cards seen in chat
+                        if (parsed.heroCards.length > 0) pendingHeroCards = parsed.heroCards;
+                        if (parsed.boardCards.length > 0) pendingBoardCards = parsed.boardCards;
+                    }
+                    addMessage(msg.role, content);
+                });
+            }
+
+            // 2. Restore Game State (Cards) from Server
+            // If server has state, use it.
+            if (data.game_state) {
+                syncVisualState(data.game_state);
+            }
+
+            // 3. Restore Analysis
+            if (data.strategy) {
+                updateAnalysisPanel({
+                    strategy: data.strategy,
+                    game_state: data.game_state
+                });
+            }
+
+            // 4. Check Pending State (If last msg was user, we are waiting for assistant)
+            // If we are pending, the server game_state might be STALE (from previous hand).
+            // We should force-update the visual slots with the cards found in the pending message.
+            if (lastMsgRole === 'user') {
+                // Detected pending response
+
+                // FORCE RESTORE CARDS from user message if available
+                if (pendingHeroCards.length > 0 || pendingBoardCards.length > 0) {
+
+                    // Construct a temporary state object to reuse syncVisualState
+                    const tempState = {
+                        hero_hand: pendingHeroCards,
+                        board_cards: pendingBoardCards
+                    };
+                    syncVisualState(tempState);
+                }
+
+                const loadingId = addLoadingIndicator();
+                startPolling(data.chat_history.length, loadingId);
+            }
+
+        } catch (err) {
+            console.error('Failed to restore state', err);
+        }
+    }
+
+    let pollingInterval = null;
+
+    function startPolling(initialCount, loadingId) {
+        if (pollingInterval) clearInterval(pollingInterval);
+
+        pollingInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/state');
+                const data = await res.json();
+
+                // If history length increased, or last message changed to assistant
+                if (data.chat_history.length > initialCount) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                    removeMessage(loadingId);
+
+                    // Verify the new message is assistant
+                    const newMsgs = data.chat_history.slice(initialCount);
+                    newMsgs.forEach(msg => {
+                        if (msg.role === 'assistant') {
+                            addMessage('assistant', formatResponse(msg.content));
+                        }
+                    });
+
+                    // Also update strategy
+                    if (data.strategy) {
+                        updateAnalysisPanel({
+                            strategy: data.strategy,
+                            game_state: data.game_state
+                        });
+                        syncVisualState(data.game_state);
+                    }
+                }
+            } catch (e) {
+                console.error('Polling error', e);
+            }
+        }, 1500); // Poll every 1.5s
+    }
+
+    function stopPolling() {
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+
+        // Safety check for chatHistory
+        if (chatHistory) {
+            // Remove valid loading indicators
+            try {
+                const thinkingBubbles = chatHistory.querySelectorAll('.message.assistant .fa-spin');
+                thinkingBubbles.forEach(icon => {
+                    const bubble = icon.closest('.message');
+                    if (bubble) bubble.remove();
+                });
+            } catch (e) {
+                console.error('Error removing bubbles', e);
+            }
+        }
+
+        // Force unlock inputs (Safety)
+        if (userInput) userInput.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+    }
+
+    // Restore on load
+    restoreState();
 });

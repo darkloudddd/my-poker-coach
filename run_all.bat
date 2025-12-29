@@ -7,11 +7,48 @@ echo 🃏 My Poker Coach - 一鍵啟動腳本 🚀
 echo ==========================================
 echo.
 
-:: 1. 安裝套件
-echo [1/3] 正在檢查並安裝 Python 套件... 📦
-pip install -r requirements.txt >nul 2>&1
+:: 檢查 Python 指令
+set PYTHON_CMD=python
+where python >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ❌ 套件安裝失敗，請檢查 Python 是否已安裝。
+    where python3 >nul 2>&1
+    if %errorlevel% neq 0 (
+        where py >nul 2>&1
+        if %errorlevel% neq 0 (
+            echo ❌ 找不到 python, python3 或 py 指令，請安裝 Python。
+            pause
+            exit /b
+        ) else (
+            set PYTHON_CMD=py
+        )
+    ) else (
+        set PYTHON_CMD=python3
+    )
+)
+
+echo ℹ️  使用系統 Python: %PYTHON_CMD%
+
+:: 1. 虛擬環境設定
+echo [1/3] 檢查並設定虛擬環境 (.venv)... 🛠️
+if not exist .venv (
+    echo ℹ️  正在建立虛擬環境...
+    %PYTHON_CMD% -m venv .venv
+    if %errorlevel% neq 0 (
+        echo ❌ 建立虛擬環境失敗。
+        pause
+        exit /b
+    )
+    echo ✅ 虛擬環境建立完成。
+)
+
+:: 設定使用虛擬環境的 Python
+set VENV_PYTHON=.venv\Scripts\python.exe
+
+:: 2. 安裝套件 (使用虛擬環境)
+echo [2/3] 正在虛擬環境中檢查並安裝套件... 📦
+"%VENV_PYTHON%" -m pip install -r requirements.txt >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ❌ 套件安裝失敗。
     pause
     exit /b
 )
@@ -19,7 +56,7 @@ echo ✅ 套件準備就緒。
 echo.
 
 :: 2. 設定環境變數
-echo [2/3] 檢查設定檔... ⚙️
+echo [3/4] 檢查設定檔... ⚙️
 if not exist .env (
     echo ⚠️  尚未設定 .env 檔案。
     echo.
@@ -28,9 +65,7 @@ if not exist .env (
     
     copy .env.example .env >nul
     
-    :: 簡單的取代方式 (Append 注意格式，這裡直接覆寫可能比較危險，我們用 append 方式加入 Key)
-    :: 為了安全與簡單，我們讀取 example，然後把 KEY 取代掉，或者直接 append。
-    :: 這裡採用 Append 方式覆寫 Key
+    :: 簡單的取代方式
     echo. >> .env
     echo LLM_API_KEY=!API_KEY! >> .env
     
@@ -41,14 +76,25 @@ if not exist .env (
 echo.
 
 :: 3. 啟動伺服器與瀏覽器
-echo [3/3] 正在啟動系統... 🚀
+echo [4/4] 正在啟動系統... 🚀
 echo.
-echo ⏳ 伺服器啟動中，請稍候...
-echo 🌍 網頁將自動開啟：http://localhost:8000
+
+:: 尋找可用 Port
+for /f "delims=" %%i in ('"%VENV_PYTHON%" find_port.py') do set SERVER_PORT=%%i
+
+if "%SERVER_PORT%"=="None" (
+    echo ❌ 找不到可用的 Port (8000-8010 皆被佔用)。
+    echo 請關閉其他使用中的程式後再試。
+    pause
+    exit /b
+)
+
+echo ⏳ 伺服器啟動中 (Port: %SERVER_PORT%)，請稍候...
+echo 🌍 網頁將自動開啟：http://localhost:%SERVER_PORT%
 
 :: 伺服器將在啟動後自動開啟瀏覽器
 
-:: 啟動 Server
-uvicorn server:app --reload
+:: 啟動 Server (使用虛擬環境)
+"%VENV_PYTHON%" -m uvicorn server:app --reload --port %SERVER_PORT%
 
 pause

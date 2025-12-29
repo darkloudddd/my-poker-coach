@@ -102,8 +102,10 @@ graph LR
 graph LR
     Data([策略數據]) --> Agent[教練代理<br/>agent.py]
     
-    Agent --> Gen[Prompt 組裝<br/>services/prompts.py]
-    Gen -->|Context| Coach{{LLM 教練<br/>services/llm_client.py}}
+    Agent --> Inject{數據注入<br/>Data Injection}
+    Inject -->|範圍組成 &<br/>範例手牌| Gen[Prompt 組裝<br/>services/prompts.py]
+    
+    Gen -->|Strict Context| Coach{{LLM 教練<br/>services/llm_client.py}}
     Coach -->|自然語言| Agent
     
     Agent --> Final([最終建議])
@@ -178,7 +180,8 @@ stateDiagram-v2
 
 ### 4. 表達層 (Expression Layer) - 虛擬教練
 - **核心檔案**: agent.py, services/prompts.py, services/llm_client.py
-- **主要職責**: 組裝可讀的 Prompt Context (策略矩陣、尺寸、數學數據、歷史對話)。
+- **主要職責**: 組裝可讀的 Prompt Context，並進行 **數據注入 (Data Injection)**，將範圍組成與範例手牌轉為文字。
+- **防幻覺機制**: 透過 Prompt 強制限制 LLM 必須引用 Engine 提供的真實數據，嚴禁自行編造戰術或引用不存在的手牌。
 - **人設與語氣**: 注入撲克教練風格，強調「為什麼」與可執行建議。
 - **輸出處理**: 清理/防呆 LLM 回應，輸出最終建議。
 

@@ -108,25 +108,41 @@ def generate_coaching_advice(user_input: str, game_state: Dict[str, Any], strate
         size_display_text = f"{size_display_text} | 可下注尺寸: {bet_hint}"
 
     # --- 3. 解析數學優勢數據 (Math Data) ---
-    # [關鍵修改] 這裡要讀取新的 engine 算出來的 adv_ratio
-    adv_ratio = ctx.get("adv_ratio", 0.0)
+    # --- 3. 解析數學優勢數據 (Math Data) ---
+    math_data = ctx.get("math_data", {}) or {}
+    
+    # 優先從 math_data 讀取 advanced metrics
+    adv_ratio = float(math_data.get("realized_range_advantage", math_data.get("range_advantage", ctx.get("adv_ratio", 0.0))))
     
     math_section = "無詳細範圍數據"
     if adv_ratio > 0:
-        if adv_ratio > 1.2: adv_label = "Hero 顯著優勢 (Aggressive)"
-        elif adv_ratio < 0.8: adv_label = "Villain 顯著優勢 (Defensive)"
+        if adv_ratio > 1.15: adv_label = "Hero 顯著優勢 (Aggressive)"
+        elif adv_ratio < 0.85: adv_label = "Villain 顯著優勢 (Defensive)"
         else: adv_label = "勢均力敵 (Neutral)"
         
         math_section = f"""
-    - 優勢比率 (Advantage Ratio): {adv_ratio:.2f} (Base: 1.0)
-    - 優勢判斷: {adv_label}
-    """
-    
-    # 若有更細的範圍摘要 (Optional)
-    if "math_data" in ctx:
-        hero_score = ctx["math_data"].get("hero_score", 0)
-        if hero_score > 0:
-             math_section += f" - 原始範圍評分 (Hero): {hero_score:.2f}"
+    - 優勢比率 (Range Advantage): {adv_ratio:.2f} (Base: 1.0)
+    - 優勢判斷: {adv_label}"""
+
+        # [NEW] 注入詳細範圍組成
+        def _fmt_summary(summary):
+            if not summary: return "未知"
+            # 排序取出前 5 名高頻率牌型
+            items = sorted(summary.items(), key=lambda x: x[1], reverse=True)
+            top_items = []
+            for k, v in items:
+                if k == "total_active_combos" or v < 0.01: continue
+                top_items.append(f"{k}({v*100:.0f}%)")
+                if len(top_items) >= 5: break
+            return ", ".join(top_items)
+
+        h_sum = _fmt_summary(math_data.get("hero_range_summary"))
+        v_sum = _fmt_summary(math_data.get("villain_range_summary"))
+        
+        math_section += f"""
+    - Hero 範圍組成: {h_sum} (Ex: {math_data.get('hero_combos_sample', 'None')})
+    - Villain 範圍組成: {v_sum} (Ex: {math_data.get('villain_combos_sample', 'None')})
+    - Nut Advantage: {math_data.get("nut_advantage", 1.0):.2f}"""
 
     # --- 4. 構建 Context (User Message) ---
     context = f"""

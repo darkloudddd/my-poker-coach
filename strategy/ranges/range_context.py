@@ -28,6 +28,15 @@ def _normalize_aggressor_tag(tag: str) -> str:
     return str(tag)
 
 
+def _get_sample_combos(combo_range: Dict[Tuple[str, str], float], limit=8) -> str:
+    """從範圍中取樣出代表性手牌 (轉換為字串列表)"""
+    if not combo_range: return ""
+    # 修正：依照權重 (Weight) 由高到低排序，取出最可能的對手手牌
+    # x 是 key (combo tuple)，combo_range[x] 是 weight
+    hands = sorted(combo_range.keys(), key=lambda x: combo_range[x], reverse=True)[:limit]
+    return ", ".join([f"{c[0]}{c[1]}" for c in hands])
+
+
 def _infer_model(features, ctx):
     # 直接讀取 features，不要自己再算一遍
     if features.get("is_3bet_pot"): return "3BP"
@@ -158,7 +167,11 @@ def ensure_range_math_data(features: Dict[str, Any], ctx: Dict[str, Any], street
             "range_advantage": adv_res.get("range_advantage", 1.0),
             "realized_range_advantage": adv_res.get("realized_range_advantage", 1.0),
             "nut_advantage": adv_res.get("nut_advantage", 1.0),
+            "realized_range_advantage": adv_res.get("realized_range_advantage", 1.0),
+            "nut_advantage": adv_res.get("nut_advantage", 1.0),
             "ratio": adv_res.get("realized_range_advantage", 1.0), # Fallback for old ratio field
+            "hero_combos_sample": _get_sample_combos(hero_combo_range),
+            "villain_combos_sample": _get_sample_combos(villain_combo_range),
             "note": f"Model: {model}, H:{hero_pos} vs V:{villain_pos} (Exact Combo + Realized Adv)"
         })
         

@@ -897,15 +897,25 @@ header h1 {
     color: rgba(255, 255, 255, 0.7);
 }
 
+/* Body container for centering */
+.recommend-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 0;
+}
+
 .main-action {
     font-family: 'Oswald', sans-serif;
     /* Strong Display Font */
-    font-size: 3.5rem;
-    /* Slightly larger */
+    font-size: 3rem;
+    /* Adjusted from 3.5rem for better balance */
     font-weight: 700;
     color: var(--md-sys-color-on-primary-container);
     text-align: center;
-    margin: 8px 0 4px;
+    margin: 0 0 8px;
+    /* Removed top margin */
     letter-spacing: 0.05em;
     /* Wider spacing for Oswald */
     text-transform: uppercase;
@@ -914,7 +924,9 @@ header h1 {
 .sub-action {
     text-align: center;
     color: var(--md-sys-color-on-surface-variant);
-    font-size: 1rem;
+    font-size: 1.1rem;
+    /* 1.0 -> 1.1 */
+    font-weight: 500;
 }
 
 /* Progress Bars */

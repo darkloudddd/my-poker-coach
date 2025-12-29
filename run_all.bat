@@ -60,10 +60,10 @@ echo.
 echo [^>^>] 4. Starting Server...
 echo.
 
-:: 直接執行 server.py，由它負責找 Port 與開瀏覽器
+:: Run server.py directly
 .venv\Scripts\python.exe server.py
 
-:: 檢查 Python 的 Exit Code
+:: Check Python Exit Code
 if errorlevel 1 (
     echo.
     echo [!] Server crashed or exited with error.

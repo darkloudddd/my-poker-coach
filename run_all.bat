@@ -29,6 +29,7 @@ if not exist .venv (
 :: 2. Install Dependencies
 echo.
 echo [+] 2. Installing dependencies...
+.venv\Scripts\python.exe -m pip install --upgrade pip
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 if errorlevel 1 (
     echo   [ERROR] Install failed.

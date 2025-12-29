@@ -39,7 +39,8 @@ VENV_PYTHON="./.venv/bin/python"
 
 # 2. Install Dependencies
 echo "📦 2. Installing dependencies..."
-"$VENV_PYTHON" -m pip install -r requirements.txt > /dev/null 2>&1
+"$VENV_PYTHON" -m pip install --upgrade pip
+"$VENV_PYTHON" -m pip install -r requirements.txt
 if [ $? -ne 0 ]; then
     echo "❌ Error: Installation failed."
     exit 1

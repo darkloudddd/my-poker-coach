@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo ==========================================
@@ -41,11 +41,16 @@ echo [OK] Dependencies ready!
 echo.
 echo [*] 3. Checking configuration...
 if not exist .env (
-    echo   Creating .env from example...
+    echo   [!] .env not found.
+    echo.
+    set /p API_KEY="Please enter your API Key (e.g. sk-...), then press Enter: "
+
+    echo   Creating .env...
     copy .env.example .env >nul
     echo. >> .env
-    echo LLM_API_KEY=sk-placeholder >> .env
-    echo   [WARNING] Please edit .env later to add your real API Key.
+    echo LLM_API_KEY=!API_KEY!>> .env
+    
+    echo   [OK] .env created with your Key.
 ) else (
     echo   Configuration found.
 )

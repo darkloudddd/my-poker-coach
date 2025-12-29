@@ -40,9 +40,22 @@ echo [OK] Dependencies ready!
 :: 3. Setup .env
 echo.
 echo [*] 3. Checking configuration...
+set NEED_SETUP=0
+
 if not exist .env (
-    echo   [!] .env not found.
+    set NEED_SETUP=1
+) else (
+    findstr "sk-placeholder" .env >nul
+    if not errorlevel 1 (
+        echo   [!] Found placeholder configuration.
+        set NEED_SETUP=1
+    )
+)
+
+if "!NEED_SETUP!"=="1" (
     echo.
+    if not exist .env echo   [!] .env not found.
+    
     set /p API_KEY="Please enter your API Key (e.g. sk-...), then press Enter: "
 
     echo   Creating .env...

@@ -12,4 +12,6 @@ def find_free_port(start_port=8000, max_port=8010):
     return None
 
 if __name__ == "__main__":
-    find_free_port()
+    port = find_free_port()
+    if port:
+        print(port)

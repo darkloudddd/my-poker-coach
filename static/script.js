@@ -399,6 +399,12 @@ document.addEventListener('DOMContentLoaded', () => {
         userInput.disabled = true;
         sendBtn.disabled = true;
 
+        // Construct UI State object for backend enforcement
+        const uiState = {
+            hero_hole_cards: heroCards,
+            board_cards: boardCards
+        };
+
         try {
             // Capture generation
             const requestGen = currentGeneration;
@@ -406,7 +412,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: fullMessage })
+                body: JSON.stringify({
+                    message: fullMessage,
+                    ui_state: uiState // [NEW] Send structured state
+                })
             });
 
             // Check generation validity

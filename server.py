@@ -36,6 +36,7 @@ session = GameSession()
 
 class ChatRequest(BaseModel):
     message: str
+    ui_state: Optional[Dict[str, Any]] = None
 
 class ChatResponse(BaseModel):
     advice: str
@@ -45,9 +46,10 @@ class ChatResponse(BaseModel):
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     user_message = request.message.strip()
+    ui_state = request.ui_state
     
-    if not user_message:
-        raise HTTPException(status_code=400, detail="Empty message")
+    if not user_message and not ui_state:
+        raise HTTPException(status_code=400, detail="Empty output")
 
     # 處理重置指令 (僅支援精確指令)
     if user_message.lower() in ["下一手", "重來", "reset"]:
@@ -56,25 +58,34 @@ async def chat(request: ChatRequest):
         return ChatResponse(advice="🧹 記憶已清除，請輸入新牌局。", game_state=None, strategy=None)
 
     # Append to history (user message)
-    session.chat_history.append({"role": "user", "content": user_message})
+    # If explicit text is empty but we have UI update, we might want to log a system event?
+    # But user usually sees "Update Hand" generic text in frontend.
+    if user_message:
+        session.chat_history.append({"role": "user", "content": user_message})
 
     # Define synchronous processing function
-    def process_chat_logic(user_msg, current_ctx, history):
+    def process_chat_logic(user_msg, current_ctx, history, ui_updates):
         try:
+            # Phase 0: Enforce UI State Updates (Override memory)
+            # This ensures that if user sees cards in UI, backend SEES them too.
+            effective_ctx = current_ctx.copy() if current_ctx else {}
+            
+            if ui_updates:
+                # Map frontend keys to backend keys if needed, or assume consistent
+                # Frontend sends: { "hero_hole_cards": [...], "board_cards": [...] }
+                effective_ctx.update(ui_updates)
+                
             # Phase 1: 解析 (Parsing)
-            # Pass a copy or the object itself? parse_poker_situation mostly uses it for ref.
-            new_features = parse_poker_situation(user_msg, current_ctx)
+            # Pass the ALREADY updated context to parser so LLM sees the new cards as "Previous State"
+            new_features = parse_poker_situation(user_msg, effective_ctx)
             
             # Check for Strategy Query
             is_query = new_features.get("is_strategy_query", False)
             
-            # Prepare working context (Handle None case)
-            local_ctx = current_ctx.copy() if current_ctx else {}
+            # Prepare working context
+            local_ctx = effective_ctx # Start with what we had + UI
             
             # Always merge new features (excluding special flags if needed, but parser usually returns clean dict + flags)
-            # Filter out the flag before update if it's in there? 
-            # new_features usually contains data keys. 
-            # We should update local_ctx regardless of is_query.
             local_ctx.update(new_features)
             
             if is_query:
@@ -126,7 +137,8 @@ async def chat(request: ChatRequest):
             process_chat_logic, 
             user_message, 
             session.current_context,
-            session.chat_history[:-1] # Exclude the just-added user message slightly unsafe if race, but simplified
+            session.chat_history[:-1], # Exclude the just-added user message
+            ui_state # [NEW] Pass UI state
         )
 
         # Check if session was reset during processing

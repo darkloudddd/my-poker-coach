@@ -53,11 +53,11 @@ echo "⚙️ 3. Checking configuration..."
 if [ ! -f .env ]; then
     echo "⚠️  .env not found."
     echo ""
-    read -p "Please enter your API Key (e.g. sk-...), then press Enter: " API_KEY
+    read -p "Please enter your Gemini API Key, then press Enter: " API_KEY
     
     cp .env.example .env
     echo "" >> .env
-    echo "LLM_API_KEY=$API_KEY" >> .env
+    echo "GEMINI_API_KEY=$API_KEY" >> .env
     
     echo "✅ .env created!"
 else

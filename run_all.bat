@@ -46,7 +46,7 @@ set NEED_SETUP=0
 if not exist .env (
     set NEED_SETUP=1
 ) else (
-    findstr "sk-placeholder" .env >nul
+    findstr "GEMINI_API_KEY=your_api_key_here" .env >nul
     if not errorlevel 1 (
         echo   [!] Found placeholder configuration.
         set NEED_SETUP=1
@@ -57,12 +57,12 @@ if "!NEED_SETUP!"=="1" (
     echo.
     if not exist .env echo   [!] .env not found.
     
-    set /p API_KEY="Please enter your API Key (e.g. sk-...), then press Enter: "
+    set /p API_KEY="Please enter your Gemini API Key, then press Enter: "
 
     echo   Creating .env...
     copy .env.example .env >nul
     echo. >> .env
-    echo LLM_API_KEY=!API_KEY!>> .env
+    echo GEMINI_API_KEY=!API_KEY!>> .env
     
     echo   [OK] .env created with your Key.
 ) else (

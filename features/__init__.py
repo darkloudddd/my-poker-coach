@@ -11,7 +11,12 @@ from .cards import (  # noqa: F401
     canonicalize_hand,
     analyze_board,
 )
-from .context import parse_poker_situation  # noqa: F401
+
+
+def parse_poker_situation(*args, **kwargs):  # noqa: F401
+    from .context import parse_poker_situation as _parse_poker_situation
+
+    return _parse_poker_situation(*args, **kwargs)
 
 __all__ = [
     "RANKS",

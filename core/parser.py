@@ -132,7 +132,9 @@ def normalize_action_token(token: Any) -> str:
     if token is None:
         return ""
     t = str(token).lower().strip()
-    if t in {"cbet", "c-bet", "donk", "lead", "下注", "打", "open"}:
+    if t in {"open"}:
+        return "open"
+    if t in {"cbet", "c-bet", "donk", "lead", "下注", "打"}:
         return "bet"
     if t in {"加注", "3bet", "3-bet", "4bet", "reraise", "re-raise", "all-in", "allin", "shove"}:
         return "raise"

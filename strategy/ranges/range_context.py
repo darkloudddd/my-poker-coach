@@ -4,13 +4,8 @@ from typing import Dict, Any, Tuple
 import traceback
 
 from .range import RANGE_ANALYZER  # 單例：避免重複生成 1326 combos
-from ..gto import DecisionMaker
 
 _RA = RANGE_ANALYZER
-_DM = DecisionMaker()
-
-# 位置順序只用於 fallback（ctx 沒給 preflop 資訊時才用）
-_POS_ORDER = {"UTG": 0, "HJ": 1, "CO": 2, "BTN": 3, "SB": 4, "BB": 5}
 
 
 def _normalize_aggressor_tag(tag: str) -> str:
@@ -28,61 +23,34 @@ def _normalize_aggressor_tag(tag: str) -> str:
     return str(tag)
 
 
-def _get_sample_combos(combo_range: Dict[Tuple[str, str], float], limit=8) -> str:
-    """從範圍中取樣出代表性手牌 (轉換為字串列表)"""
+def _get_sample_combos(combo_range: Dict[Tuple[str, str], float], board_cards: list = None, limit_per_cat=2) -> str:
     if not combo_range: return ""
-    # 修正：依照權重 (Weight) 由高到低排序，取出最可能的對手手牌
-    # x 是 key (combo tuple)，combo_range[x] 是 weight
-    hands = sorted(combo_range.keys(), key=lambda x: combo_range[x], reverse=True)[:limit]
-    return ", ".join([f"{c[0]}{c[1]}" for c in hands])
-
-
-def _infer_model(features, ctx):
-    # 直接讀取 features，不要自己再算一遍
-    if features.get("is_3bet_pot"): return "3BP"
-    return "SRP"
-
-
-def _infer_roles(features: Dict[str, Any], ctx: Dict[str, Any], model: str) -> Tuple[str, str, list]:
-    """
-    回傳 (opener, threebettor_or_none, assumptions)
-
-    opener / threebettor_or_none 的值：
-      - 'hero' / 'villain'
-      - threebettor_or_none 在 SRP 會是 'none'
-    """
-    assumptions = []
-    aggressor = _normalize_aggressor_tag((ctx or {}).get("preflop_aggressor"))  # 'hero' / 'villain' / None
-
-    if model == "SRP":
-        # SRP：aggressor == opener（最後一次加注就是 open）
-        if aggressor in ("hero", "villain"):
-            assumptions.append("SRP：使用 ctx.preflop_aggressor 決定 opener（不再用位置順序猜）")
-            return aggressor, "none", assumptions
-
-        # fallback：用位置順序猜（盡量少用）
-        hero_pos = features.get("hero_position", "BTN")
-        villain_pos = features.get("villain_position", "BB")
-        hero_first = _POS_ORDER.get(hero_pos, 999) < _POS_ORDER.get(villain_pos, 999)
-        opener = "villain" if hero_first else "hero"
-        assumptions.append("SRP fallback：ctx 未提供 preflop_aggressor，使用位置順序近似推斷 opener")
-        return opener, "none", assumptions
-
-    # 3BP：aggressor == 3-bettor（最後一次加注是 3bet）
-    if aggressor in ("hero", "villain"):
-        threebettor = aggressor
-        opener = "villain" if threebettor == "hero" else "hero"
-        assumptions.append("3BP：使用 ctx.preflop_aggressor 決定 3-bettor/opener（不再用位置順序猜）")
-        return opener, threebettor, assumptions
-
-    # fallback：用位置順序猜誰是 opener，另一方當作 3bettor（不可靠但比完全不能算好）
-    hero_pos = features.get("hero_position", "BTN")
-    villain_pos = features.get("villain_position", "BB")
-    hero_first = _POS_ORDER.get(hero_pos, 999) < _POS_ORDER.get(villain_pos, 999)
-    opener = "villain" if hero_first else "hero"
-    threebettor = "hero" if opener == "villain" else "villain"
-    assumptions.append("3BP fallback：ctx 未提供 preflop_aggressor，使用位置順序近似推斷 opener/3-bettor")
-    return opener, threebettor, assumptions
+    sorted_combos = sorted(combo_range.keys(), key=lambda x: combo_range[x], reverse=True)
+    if not board_cards:
+        return ", ".join([f"{c[0]}{c[1]}" for c in sorted_combos[:8]])
+        
+    try:
+        import sys
+        sys.path.append("c:\_src\python\計算理論專題\my_poker_coach")
+        from strategy.eval import calculate_hand_strength
+        from strategy.utils import effective_hand_category
+    except Exception as e:
+        return ", ".join([f"{c[0]}{c[1]}" for c in sorted_combos[:8]])
+        
+    cat_hands = {}
+    board_set = set(board_cards)
+    for c in sorted_combos:
+        if c[0] in board_set or c[1] in board_set: continue
+        try:
+            cat, details = calculate_hand_strength(list(c), board_cards)
+            eff = effective_hand_category(cat, details)
+            if eff not in cat_hands: cat_hands[eff] = []
+            if len(cat_hands[eff]) < limit_per_cat:
+                cat_hands[eff].append(f"{c[0]}{c[1]}")
+        except:
+            pass
+            
+    return " | ".join([f"{cat}: {','.join(h)}" for cat, h in cat_hands.items() if cat != 'air'])
 
 
 def ensure_range_math_data(features: Dict[str, Any], ctx: Dict[str, Any], street: str) -> Dict[str, Any]:
@@ -167,11 +135,11 @@ def ensure_range_math_data(features: Dict[str, Any], ctx: Dict[str, Any], street
             "range_advantage": adv_res.get("range_advantage", 1.0),
             "realized_range_advantage": adv_res.get("realized_range_advantage", 1.0),
             "nut_advantage": adv_res.get("nut_advantage", 1.0),
-            "realized_range_advantage": adv_res.get("realized_range_advantage", 1.0),
-            "nut_advantage": adv_res.get("nut_advantage", 1.0),
+            "hero_rf": adv_res.get("hero_rf", 1.0),
+            "villain_rf": adv_res.get("villain_rf", 1.0),
             "ratio": adv_res.get("realized_range_advantage", 1.0), # Fallback for old ratio field
-            "hero_combos_sample": _get_sample_combos(hero_combo_range),
-            "villain_combos_sample": _get_sample_combos(villain_combo_range),
+            "hero_combos_sample": _get_sample_combos(hero_combo_range, board_cards),
+            "villain_combos_sample": _get_sample_combos(villain_combo_range, board_cards),
             "note": f"Model: {model}, H:{hero_pos} vs V:{villain_pos} (Exact Combo + Realized Adv)"
         })
         

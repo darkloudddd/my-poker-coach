@@ -4,8 +4,6 @@ from typing import List, Dict, Tuple, Any, Optional
 # 0. Imports & Setup
 # ==============================================================================
 from ..utils import (
-    calculate_hand_strength, 
-    RANKS, 
     SUITS
 )
 from features import canonicalize_hand
@@ -208,31 +206,6 @@ class RangeAnalyzer:
                 combo_range[combo] = weight
         return combo_range
 
-    def get_preflop_weighted_range(self, hero_pos: str, villain_pos: str, action: str = 'RFI') -> Dict[str, float]:
-        """根據位置與行動獲取 Preflop 範圍權重"""
-        weighted_range: Dict[str, float] = {}
-
-        if action == 'RFI':
-            if hero_pos in RFI_RANGES:
-                return RFI_RANGES[hero_pos]
-
-        elif action in ['3bet', 'call']:
-            if hero_pos in FACING_OPEN and villain_pos in FACING_OPEN[hero_pos]:
-                hand_list = FACING_OPEN[hero_pos][villain_pos].get(action, [])
-                for hand_code in hand_list:
-                    weighted_range[hand_code] = 1.0
-                return weighted_range
-
-        elif action in ['4bet', 'call_3bet']:
-            if hero_pos in FACING_3BET and villain_pos in FACING_3BET[hero_pos]:
-                k = '4bet' if action == '4bet' else 'call'
-                hand_list = FACING_3BET[hero_pos][villain_pos].get(k, [])
-                for hand_code in hand_list:
-                    weighted_range[hand_code] = 1.0
-                return weighted_range
-
-        return {}
-        
     def get_postflop_range_summary(
         self, 
         combo_range: Dict[Tuple[str, str], float], 
@@ -348,60 +321,6 @@ class RangeAnalyzer:
             "hero_summary": hero_summary,
             "villain_summary": villain_summary
         }
-
-    def filter_range_by_action(
-        self, 
-        base_combo_range: Dict[Tuple[str, str], float], 
-        action: str, 
-        street: str, 
-        board_cards: List[str],
-        board_info: Optional[Dict[str, Any]] = None
-    ) -> Dict[Tuple[str, str], float]:
-        """
-        根據玩家行動過濾範圍 (Range Capping)。
-        操作對象為 combo_range: Dict[Tuple[str, str], float]
-        """
-        if not base_combo_range: return {}
-        
-        from ..utils import calculate_hand_strength, effective_hand_category
-        
-        if not board_info and board_cards:
-            from features import analyze_board
-            board_info = analyze_board(board_cards)
-        
-        conn_score = board_info.get("connectedness_score", 0) if board_info else 0
-        is_dynamic = board_info.get("is_dynamic", False) if board_info else False
-        is_wet = conn_score >= 60 or is_dynamic
-        
-        filtered = base_combo_range.copy()
-        
-        for combo, weight in filtered.items():
-            # 獲取該組合的實際牌力
-            cat, details = calculate_hand_strength(list(combo), board_cards)
-            eff_cat = effective_hand_category(cat, details)
-
-            # 1. CHECK (Capping Logic)
-            if action == 'check':
-                if eff_cat in ["straight_flush", "quads", "full_house", "flush", "straight", "set"]:
-                    penalty = 0.05 if is_wet else 0.2
-                    filtered[combo] *= penalty
-                elif eff_cat in ["two_pair", "top_pair"]:
-                    filtered[combo] *= 0.6 if is_wet else 0.8
-                    
-            # 2. CALL (Bluff Catcher Logic)
-            elif action == 'call':
-                if eff_cat in ["straight_flush", "quads", "full_house", "flush", "straight"]:
-                    penalty = 0.15 if is_wet else 0.4
-                    filtered[combo] *= penalty
-                elif eff_cat == "air":
-                    filtered[combo] *= 0.4
-                    
-            # 3. BET / RAISE (Uncapping/Polarization Logic)
-            elif action in ['bet', 'raise']:
-                if eff_cat in ["middle_pair", "weak_pair"]:
-                    filtered[combo] *= 0.4
-        
-        return filtered
 
 # 初始化 RangeAnalyzer 實例，以便外部調用
 RANGE_ANALYZER = RangeAnalyzer()

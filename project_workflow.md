@@ -218,4 +218,46 @@ stateDiagram-v2
 - **核心檔案**: static/index.html, static/script.js, static/style.css
 - **主要職責**: 提供聊天介面與卡牌選取器，將輸入送至 /chat。
 - **狀態呈現**: 顯示策略建議與數據摘要，支援重置流程。
+
+---
+
+## 6. strategy 模組呼叫圖（誰 call 誰）
+
+以下是最精準的「檔案 + 函式」級呼叫流程，支援與同事/主管對外說明。
+
+```mermaid
+flowchart TD
+    A[輸入: User/Agent] --> B[strategy.engine.recommend_action()]
+    B --> C{street?}
+    C -->|preflop| D[strategy.streets.preflop.recommend_action()]
+    C -->|flop| E[strategy.streets.flop.recommend_action()]
+    C -->|turn| F[strategy.streets.turn.recommend_action()]
+    C -->|river| G[strategy.streets.river.recommend_action()]
+
+    B --> H[strategy.ranges.get_dynamic_advantage()]
+    H --> I[strategy.ranges.range_utils.apply_action_history_to_ranges()]
+    I --> J[strategy.ranges.range.range_via get_preflop_range()]
+    I --> K[strategy.reasoning.contextual_reasoner.ContextualReasoner.reason_street()]
+    K --> L[strategy.reasoning.board_structure / strength_analyzer]
+    K --> M[回傳新的 villain_range]
+
+    M --> N[strategy.ranges.range_insights.RangeInsights.analyze_villain_range()]
+
+    D --> O[strategy.gto.GTOAnalyzer 等計算]
+    E --> O
+    F --> O
+    G --> O
+
+    N --> P[街道策略合成決策]
+    P --> B
+
+    B --> Q[回傳結果給 Agent/上層]
+```
+
+### 6.1 核心呼叫邏輯說明
+- `strategy.engine.recommend_action` 為主入口；決定街道同時觸發 `get_dynamic_advantage`。
+- `range_utils.apply_action_history_to_ranges` 使用 `ContextualReasoner` 進行現場推理，舊 `ActionBasedFiltering` 已去除。
+- 牌面/牌力分析由 `reasoning.board_structure`、`reasoning.strength_analyzer` 提供，結果回到 `range_insights` 供決策。
+- 各街道（preflop/flop/turn/river）仍可在必要時使用 GTO 數學計算（`strategy.gto`、`strategy.pot`、`strategy.utils`）。
+
 - **定位**: 純靜態前端，依賴 API 回傳的 JSON。

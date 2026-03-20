@@ -3,25 +3,611 @@ Context / situation parsing extracted from agent.py
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 import traceback
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Set, Tuple, Union
 
 from .cards import parse_hand_string, normalize_card_input
+from .schema import validate_parser_snapshot
 from core.parser import (
     normalize_action_token,
     resolve_amount,
     action_has_amount,
+    coerce_amount,
 )
 from services.prompts import EXTRACTOR_SYSTEM_PROMPT
-from services.llm_client import call_llm
 from strategy.pot import compute_pot_bb, compute_amount_to_call
 
 
 # ==========================================
 # 解析輔助函式
 # ==========================================
+
+_STREETS = ("preflop", "flop", "turn", "river")
+_POSITION_CANONICAL_MAP = {
+    "utg": "UTG",
+    "utg1": "UTG+1",
+    "utg+1": "UTG+1",
+    "mp": "MP",
+    "lj": "LJ",
+    "hj": "HJ",
+    "co": "CO",
+    "btn": "BTN",
+    "button": "BTN",
+    "buttun": "BTN",
+    "botton": "BTN",
+    "dealer": "BTN",
+    "按鈕": "BTN",
+    "莊位": "BTN",
+    "庄位": "BTN",
+    "sb": "SB",
+    "smallblind": "SB",
+    "小盲": "SB",
+    "bb": "BB",
+    "bigblind": "BB",
+    "大盲": "BB",
+}
+_POSITION_TOKEN_RE = re.compile(
+    r"utg\+1|utg1|utg|mp|lj|hj|co|btn|button|buttun|botton|dealer|"
+    r"sb|small\s*blind|bb|big\s*blind|按鈕|莊位|庄位|小盲|大盲",
+    re.IGNORECASE,
+)
+_CARD_TOKEN_RE = re.compile(r"(10|[2-9TJQKA])([shdc])", re.IGNORECASE)
+_ACTION_TOKEN_RE = re.compile(
+    r"open|raise|3bet|3-bet|4bet|4-bet|bet|cbet|c-bet|call|check|fold|limp|jam|shove|all-?in|"
+    r"下注|打|加注|跟注|過牌|棄牌|蓋牌",
+    re.IGNORECASE,
+)
+_PLAYER_ACTION_RE = re.compile(
+    rf"(?P<player>hero|villain|opponent|我|對手|他|{_POSITION_TOKEN_RE.pattern})\s*"
+    rf"(?:(?:在|is)\s*(?:{_POSITION_TOKEN_RE.pattern})\s*)?"
+    rf"(?P<action>{_ACTION_TOKEN_RE.pattern})"
+    rf"(?P<rest>.*?)(?=(?:hero|villain|opponent|我|對手|他|{_POSITION_TOKEN_RE.pattern})\s*"
+    rf"(?:{_ACTION_TOKEN_RE.pattern})|$)",
+    re.IGNORECASE,
+)
+_STREET_PATTERNS = {
+    "preflop": re.compile(r"\bpreflop\b|翻前|翻牌前", re.IGNORECASE),
+    "flop": re.compile(r"\bflop\b|翻牌", re.IGNORECASE),
+    "turn": re.compile(r"\bturn\b|轉牌", re.IGNORECASE),
+    "river": re.compile(r"\briver\b|河牌", re.IGNORECASE),
+}
+_QUERY_HINTS = ("怎麼", "為什麼", "是否", "可不可以", "可以", "該不該", "應該", "建議", "strategy", "line")
+
+
+def _empty_actions() -> Dict[str, List[Dict[str, Any]]]:
+    return {street: [] for street in _STREETS}
+
+
+def _normalize_position_token(token: Any) -> str:
+    if token is None:
+        return ""
+    clean = re.sub(r"[\s\-_]+", "", str(token).strip().lower())
+    return _POSITION_CANONICAL_MAP.get(clean, "")
+
+
+def _normalize_card_token(rank_text: str, suit_text: str) -> str:
+    rank = str(rank_text).upper()
+    if rank == "10":
+        rank = "T"
+    suit = str(suit_text).lower()
+    return f"{rank}{suit}"
+
+
+def _find_card_tokens(text: Any) -> List[str]:
+    if not text:
+        return []
+    return [_normalize_card_token(match.group(1), match.group(2)) for match in _CARD_TOKEN_RE.finditer(str(text))]
+
+
+def _detect_street(text: Any) -> str:
+    if not text:
+        return ""
+    raw = str(text)
+    for street, pattern in _STREET_PATTERNS.items():
+        if pattern.search(raw):
+            return street
+    return ""
+
+
+def _normalize_player_token(token: Any, hero_pos: str, villain_pos: str) -> str:
+    raw = str(token or "").strip()
+    raw_lower = raw.lower()
+    if raw_lower in {"hero", "我"}:
+        return "HERO"
+    if raw_lower in {"villain", "opponent", "對手", "他"}:
+        return "VILLAIN"
+    return _normalize_position_token(raw)
+
+
+def _extract_positions_from_text(text: str) -> Tuple[str, str]:
+    hero_pos = ""
+    villain_pos = ""
+
+    matchup = re.search(
+        rf"(?P<hero>{_POSITION_TOKEN_RE.pattern})\s*(?:vs\.?|v\.?|對上|對到|對)\s*(?P<villain>{_POSITION_TOKEN_RE.pattern})",
+        text,
+        re.IGNORECASE,
+    )
+    if matchup:
+        hero_pos = _normalize_position_token(matchup.group("hero")) or hero_pos
+        villain_pos = _normalize_position_token(matchup.group("villain")) or villain_pos
+
+    hero_patterns = (
+        rf"(?:hero|hero\s+is|我在|我是|我的位置)\s*[:：]?\s*(?P<pos>{_POSITION_TOKEN_RE.pattern})",
+    )
+    villain_patterns = (
+        rf"(?:villain|opponent|對手|對手在|對手是)\s*[:：]?\s*(?P<pos>{_POSITION_TOKEN_RE.pattern})",
+    )
+
+    for pattern in hero_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            hero_pos = _normalize_position_token(match.group("pos")) or hero_pos
+            break
+
+    for pattern in villain_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            villain_pos = _normalize_position_token(match.group("pos")) or villain_pos
+            break
+
+    return hero_pos, villain_pos
+
+
+def _extract_hero_cards_from_text(text: str) -> List[str]:
+    patterns = (
+        r"(?:手牌|hero\s*cards?|my\s*hand|我拿到|我有|持有)\s*[:：]?\s*(?P<cards>[^\n,;，。]+)",
+        r"(?:hero|我)\s*[:：]?\s*(?P<cards>(?:\s*(?:10|[2-9TJQKA])[shdc]){2,})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            continue
+        cards = _find_card_tokens(match.group("cards"))
+        if len(cards) >= 2:
+            return cards[:2]
+    return []
+
+
+def _extract_action_amount(rest: str, action: str) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    raw = str(rest or "")
+
+    explicit_amount = None
+    amount_match = re.search(r"(\d+(?:\.\d+)?)\s*bb", raw, re.IGNORECASE)
+    if amount_match:
+        explicit_amount = coerce_amount(amount_match.group(1))
+    elif action == "raise":
+        to_match = re.search(r"\bto\s*(\d+(?:\.\d+)?)", raw, re.IGNORECASE)
+        if to_match:
+            explicit_amount = coerce_amount(to_match.group(1))
+    elif action in {"open", "bet", "limp"}:
+        number_match = re.search(r"(\d+(?:\.\d+)?)", raw)
+        if number_match:
+            explicit_amount = coerce_amount(number_match.group(1))
+
+    if explicit_amount is not None and explicit_amount > 0:
+        payload["amount"] = explicit_amount
+        return payload
+
+    ratio_match = re.search(
+        r"(\d+(?:\.\d+)?\s*%\s*(?:pot|池)?|\d+(?:\.\d+)?\s*/\s*\d+(?:\.\d+)?\s*(?:pot|池)?|半池|半 pot|half pot|七成半|七成|全池|滿池)",
+        raw,
+        re.IGNORECASE,
+    )
+    if ratio_match:
+        payload["amount_ratio"] = ratio_match.group(1).strip()
+        return payload
+
+    if re.search(r"all-?in|jam|shove", raw, re.IGNORECASE):
+        payload["is_all_in"] = True
+    return payload
+
+
+def _extract_actions_from_segment(
+    segment: str,
+    street: str,
+    hero_pos: str,
+    villain_pos: str,
+) -> List[Dict[str, Any]]:
+    extracted: List[Dict[str, Any]] = []
+    for match in _PLAYER_ACTION_RE.finditer(segment):
+        player = _normalize_player_token(match.group("player"), hero_pos, villain_pos)
+        action = normalize_action_token(match.group("action"))
+        if not player or not action:
+            continue
+        entry: Dict[str, Any] = {
+            "player": player,
+            "action": action,
+        }
+        entry.update(_extract_action_amount(match.group("rest"), action))
+        extracted.append(entry)
+    return extracted
+
+
+def _extract_rule_based_update(user_input: str, current_state: Dict[str, Any]) -> Dict[str, Any]:
+    text = str(user_input or "")
+    segments = [seg.strip() for seg in re.split(r"[\n,;，。]+", text) if seg.strip()]
+
+    hero_pos, villain_pos = _extract_positions_from_text(text)
+    action_hero_pos = hero_pos or str(current_state.get("hero_position", "") or "")
+    action_villain_pos = villain_pos or str(current_state.get("villain_position", "") or "")
+    hero_cards = _extract_hero_cards_from_text(text)
+
+    working_board = list(current_state.get("board_cards", []) or [])
+    board_updated = False
+    actions = _empty_actions()
+    action_streets: Set[str] = set()
+    clear_action_streets: Set[str] = set()
+    mentioned_streets: List[str] = []
+    current_street = "preflop"
+
+    board_label_match = re.search(r"(?:board|board cards|公牌)\s*[:：]?\s*(?P<cards>[^\n;，。]+)", text, re.IGNORECASE)
+    if board_label_match:
+        board_cards = _find_card_tokens(board_label_match.group("cards"))
+        if 3 <= len(board_cards) <= 5:
+            working_board = board_cards[:5]
+            board_updated = True
+
+    for segment in segments:
+        explicit_street = _detect_street(segment)
+        if explicit_street:
+            current_street = explicit_street
+            mentioned_streets.append(explicit_street)
+
+            street_cards = _find_card_tokens(segment)
+            if explicit_street == "flop" and len(street_cards) >= 3:
+                working_board = street_cards[:3]
+                board_updated = True
+            elif explicit_street == "turn" and street_cards:
+                base = working_board[:3] or list(current_state.get("board_cards", []) or [])[:3]
+                working_board = base + [street_cards[0]]
+                board_updated = True
+            elif explicit_street == "river" and street_cards:
+                base = working_board[:4] or list(current_state.get("board_cards", []) or [])[:4]
+                working_board = base + [street_cards[0]]
+                board_updated = True
+
+        extracted_actions = _extract_actions_from_segment(segment, current_street, action_hero_pos, action_villain_pos)
+        if extracted_actions:
+            actions[current_street].extend(extracted_actions)
+            action_streets.add(current_street)
+
+    if actions.get("preflop"):
+        clear_action_streets.update(_STREETS)
+
+    explicit_seen_players = {
+        str(item.get("player", "")).upper()
+        for street in _STREETS
+        for item in actions.get(street, [])
+        if isinstance(item, dict) and str(item.get("player", "")).upper() not in {"HERO", "VILLAIN"}
+    }
+    if hero_pos and not villain_pos:
+        others = explicit_seen_players - {str(hero_pos).upper()}
+        if len(others) == 1:
+            villain_pos = next(iter(others))
+    if villain_pos and not hero_pos:
+        others = explicit_seen_players - {str(villain_pos).upper()}
+        if len(others) == 1:
+            hero_pos = next(iter(others))
+
+    resolved_hero = str(hero_pos or current_state.get("hero_position", "") or "").upper()
+    resolved_villain = str(villain_pos or current_state.get("villain_position", "") or "").upper()
+    for street in _STREETS:
+        for item in actions.get(street, []):
+            if not isinstance(item, dict):
+                continue
+            player = str(item.get("player", "")).upper()
+            if player == "HERO" and resolved_hero:
+                item["player"] = resolved_hero
+            elif player == "VILLAIN" and resolved_villain:
+                item["player"] = resolved_villain
+
+    final_street = mentioned_streets[-1] if mentioned_streets else ""
+    if not final_street and len(working_board) in {3, 4, 5}:
+        final_street = {3: "flop", 4: "turn", 5: "river"}[len(working_board)]
+
+    if final_street and final_street not in action_streets and final_street != "preflop":
+        clear_action_streets.add(final_street)
+
+    parsed: Dict[str, Any] = {
+        "hero_position": hero_pos,
+        "villain_position": villain_pos,
+        "hero_hole_cards": hero_cards[:2] if len(hero_cards) >= 2 else hero_cards,
+        "board_cards": working_board if board_updated else [],
+        "street": final_street,
+        "actions": actions,
+        "_action_streets": action_streets,
+        "_clear_action_streets": clear_action_streets,
+        "_mentioned_streets": set(mentioned_streets),
+    }
+
+    has_new_info = bool(hero_pos or villain_pos or hero_cards or board_updated or mentioned_streets or any(actions[street] for street in _STREETS))
+    parsed["_has_new_info"] = has_new_info
+    return parsed
+
+
+def _merge_partial_parse(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    merged = copy.deepcopy(base or {})
+    source = update or {}
+
+    for key in ("hero_position", "villain_position", "hero_hole_cards", "board_cards", "street", "hero_stack_bb", "villain_stack_bb"):
+        value = source.get(key)
+        if value in (None, "", []):
+            continue
+        merged[key] = copy.deepcopy(value)
+
+    for key in ("is_strategy_query", "error", "missing_fields", "meta", "blinds", "hand_ended", "showdown"):
+        if key in source:
+            merged[key] = copy.deepcopy(source.get(key))
+
+    if "players" in source and isinstance(source.get("players"), dict):
+        merged_players = merged.get("players") if isinstance(merged.get("players"), dict) else {}
+        for role in ("hero", "villain"):
+            info = source["players"].get(role)
+            if not isinstance(info, dict):
+                continue
+            existing = merged_players.get(role) if isinstance(merged_players.get(role), dict) else {}
+            next_info = copy.deepcopy(existing)
+            for key, value in info.items():
+                if value in (None, "", []):
+                    continue
+                next_info[key] = copy.deepcopy(value)
+            merged_players[role] = next_info
+        merged["players"] = merged_players
+
+    if "board" in source and isinstance(source.get("board"), dict):
+        merged_board = merged.get("board") if isinstance(merged.get("board"), dict) else {}
+        next_board = copy.deepcopy(merged_board)
+        for key, value in source["board"].items():
+            if value in (None, "", []):
+                continue
+            next_board[key] = copy.deepcopy(value)
+        merged["board"] = next_board
+
+    if isinstance(source.get("actions"), dict):
+        action_streets = source.get("_action_streets")
+        clear_action_streets = source.get("_clear_action_streets")
+        has_action_payload = any(
+            isinstance(source["actions"].get(street), list) and source["actions"].get(street)
+            for street in _STREETS
+        )
+
+        should_override_actions = bool(has_action_payload)
+        if isinstance(action_streets, set) and action_streets:
+            should_override_actions = True
+        if isinstance(clear_action_streets, set) and clear_action_streets:
+            should_override_actions = True
+
+        if not should_override_actions:
+            return merged
+
+        merged_actions = _empty_actions()
+        base_actions = merged.get("actions", {})
+        if isinstance(base_actions, dict):
+            for street in _STREETS:
+                if isinstance(base_actions.get(street), list):
+                    merged_actions[street] = copy.deepcopy(base_actions.get(street, []))
+
+        if isinstance(action_streets, set) or isinstance(clear_action_streets, set):
+            action_streets = set(action_streets or set())
+            clear_action_streets = set(clear_action_streets or set())
+            for street in clear_action_streets:
+                if street in merged_actions:
+                    merged_actions[street] = []
+            for street in action_streets:
+                if street in merged_actions:
+                    merged_actions[street] = copy.deepcopy(source["actions"].get(street, []))
+            if has_action_payload and not action_streets:
+                for street in _STREETS:
+                    if isinstance(source["actions"].get(street), list) and source["actions"].get(street):
+                        merged_actions[street] = copy.deepcopy(source["actions"].get(street, []))
+        else:
+            for street in _STREETS:
+                if street in source["actions"] and isinstance(source["actions"].get(street), list):
+                    merged_actions[street] = copy.deepcopy(source["actions"].get(street, []))
+
+        merged["actions"] = merged_actions
+    elif isinstance(source.get("actions"), list):
+        merged["actions"] = copy.deepcopy(source.get("actions", []))
+
+    return merged
+
+
+def _build_prompt_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(state, dict):
+        return {}
+    allowed_keys = (
+        "hero_position",
+        "villain_position",
+        "hero_hole_cards",
+        "board_cards",
+        "street",
+        "hero_stack_bb",
+        "villain_stack_bb",
+        "pot_bb",
+        "actions",
+        "villain_action",
+        "is_3bet_pot",
+        "line_state",
+    )
+    snapshot = {}
+    for key in allowed_keys:
+        value = state.get(key)
+        if key == "actions" and isinstance(value, dict) and not _actions_has_data(value):
+            continue
+        if value in (None, "", [], {}):
+            continue
+        snapshot[key] = copy.deepcopy(value)
+    return snapshot
+
+
+def _build_rule_hint_snapshot(rule_data: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(rule_data, dict):
+        return {}
+    hint = {}
+    for key in ("hero_position", "villain_position", "hero_hole_cards", "board_cards", "street", "actions"):
+        value = rule_data.get(key)
+        if key == "actions" and isinstance(value, dict) and not _actions_has_data(value):
+            continue
+        if value in (None, "", [], {}):
+            continue
+        hint[key] = copy.deepcopy(value)
+    return hint
+
+
+def _extract_json_object(raw_text: str) -> Dict[str, Any]:
+    text = str(raw_text or "").replace("```json", "").replace("```", "").strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+            return parsed[0]
+    except json.JSONDecodeError:
+        pass
+
+    lines = text.splitlines()
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("{") or not line.endswith("}"):
+            continue
+        try:
+            parsed = json.loads(line)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            continue
+    return {}
+
+
+def _normalize_llm_snapshot(raw_data: Dict[str, Any], current_state: Dict[str, Any]) -> Dict[str, Any]:
+    data = copy.deepcopy(raw_data or {})
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    players = data.get("players") if isinstance(data.get("players"), dict) else {}
+    hero_info = players.get("hero") if isinstance(players.get("hero"), dict) else {}
+    villain_info = players.get("villain") if isinstance(players.get("villain"), dict) else {}
+    board = data.get("board") if isinstance(data.get("board"), dict) else {}
+
+    hero_pos = hero_info.get("position") or data.get("hero_position") or current_state.get("hero_position")
+    villain_pos = villain_info.get("position") or data.get("villain_position") or current_state.get("villain_position")
+    raw_actions = data.get("actions", {})
+    normalized_actions = _normalize_actions_from_model(raw_actions, hero_pos or "", villain_pos or "")
+
+    normalized = {
+        "is_strategy_query": bool(data.get("is_strategy_query", False)),
+        "is_new_hand": data.get("is_new_hand"),
+        "hero_position": hero_info.get("position") or data.get("hero_position"),
+        "villain_position": villain_info.get("position") or data.get("villain_position"),
+        "hero_hole_cards": hero_info.get("cards") or data.get("hero_hole_cards") or [],
+        "board_cards": board.get("cards") or data.get("board_cards") or [],
+        "street": data.get("street"),
+        "hero_stack_bb": hero_info.get("stack_bb") if hero_info.get("stack_bb") is not None else data.get("hero_stack_bb"),
+        "villain_stack_bb": villain_info.get("stack_bb") if villain_info.get("stack_bb") is not None else data.get("villain_stack_bb"),
+        "pot_bb": data.get("pot_bb"),
+        "actions": normalized_actions,
+        "blinds": data.get("blinds") if isinstance(data.get("blinds"), dict) else {"sb": 0.5, "bb": 1.0},
+        "missing_fields": data.get("missing_fields") or meta.get("missing_fields") or [],
+        "assumptions": data.get("assumptions") or meta.get("assumptions") or [],
+        "confidence": data.get("confidence") if data.get("confidence") is not None else meta.get("confidence"),
+    }
+
+    validated = validate_parser_snapshot(normalized)
+    if hasattr(validated, "model_dump"):
+        return validated.model_dump()
+    return validated.dict()
+
+
+def _merge_llm_snapshot(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    source = copy.deepcopy(update or {})
+    if source.get("is_new_hand"):
+        base = {}
+    merged = copy.deepcopy(base or {})
+
+    for key in (
+        "hero_position",
+        "villain_position",
+        "hero_hole_cards",
+        "board_cards",
+        "street",
+        "hero_stack_bb",
+        "villain_stack_bb",
+        "pot_bb",
+        "blinds",
+        "confidence",
+    ):
+        value = source.get(key)
+        if value in (None, "", [], {}):
+            continue
+        merged[key] = copy.deepcopy(value)
+
+    if "is_strategy_query" in source:
+        merged["is_strategy_query"] = bool(source.get("is_strategy_query", False))
+    if "is_new_hand" in source:
+        merged["is_new_hand"] = source.get("is_new_hand")
+    if "missing_fields" in source:
+        merged["missing_fields"] = copy.deepcopy(source.get("missing_fields") or [])
+    if "assumptions" in source:
+        merged["assumptions"] = copy.deepcopy(source.get("assumptions") or [])
+
+    actions = source.get("actions")
+    if isinstance(actions, dict) and _actions_has_data(actions):
+        merged["actions"] = copy.deepcopy(actions)
+
+    return merged
+
+
+def _has_complete_rule_parse(data: Dict[str, Any]) -> bool:
+    if not isinstance(data, dict):
+        return False
+    hero_pos = data.get("hero_position")
+    villain_pos = data.get("villain_position")
+    hero_cards = normalize_card_input(data.get("hero_hole_cards", []))
+    board_cards = normalize_card_input(data.get("board_cards", []))
+    street = str(data.get("street", "")).lower()
+    actions = data.get("actions", {})
+
+    if not hero_pos or not villain_pos:
+        return False
+    if len(hero_cards) != 2:
+        return False
+    if len(board_cards) not in {0, 3, 4, 5}:
+        return False
+    if street not in {"preflop", "flop", "turn", "river"}:
+        return False
+    return _actions_has_data(actions)
+
+
+def _has_meaningful_hand_update(data: Dict[str, Any]) -> bool:
+    if not isinstance(data, dict):
+        return False
+    if data.get("hero_position") or data.get("villain_position"):
+        return True
+    if len(normalize_card_input(data.get("hero_hole_cards", []))) == 2:
+        return True
+    if len(normalize_card_input(data.get("board_cards", []))) in {3, 4, 5}:
+        return True
+    if str(data.get("street", "")).lower() in {"preflop", "flop", "turn", "river"}:
+        return True
+    return _actions_has_data(data.get("actions", {}))
+
+
+def _looks_like_strategy_query(user_input: str, current_state: Dict[str, Any], rule_data: Dict[str, Any]) -> bool:
+    if not current_state:
+        return False
+    if rule_data.get("_has_new_info"):
+        return False
+    text = str(user_input or "").strip().lower()
+    if not text:
+        return False
+    if "?" in text or "？" in text:
+        return True
+    return any(hint in text for hint in _QUERY_HINTS)
 
 
 
@@ -304,55 +890,59 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
         except ValueError:
             return None
 
+    current_state = current_state or {}
+    rule_data = _extract_rule_based_update(user_input, current_state)
+
+    if _looks_like_strategy_query(user_input, current_state, rule_data):
+        preserved = copy.deepcopy(current_state)
+        preserved["is_strategy_query"] = True
+        return preserved
+
     state_prompt = ""
-    if current_state:
-        filtered_keys = [
-            "hero_hole_cards",
-            "board_cards",
-            "actions",
-            "hero_position",
-            "villain_position",
-            "pot_bb",
-            "hero_stack_bb",
-            "villain_stack_bb",
-            "street",
-            "is_3bet_pot",
-            "villain_action",
-        ]
-        filtered_state = {k: v for k, v in current_state.items() if k in filtered_keys}
-        state_prompt = f"【上一手狀態】: {json.dumps(filtered_state)}\n"
+    prev_snapshot = _build_prompt_snapshot(current_state)
+    if prev_snapshot:
+        state_prompt = f"【上一手狀態】: {json.dumps(prev_snapshot, ensure_ascii=False)}\n"
 
-    user_message = f"{state_prompt}【用戶新指令】: {user_input}"
-
-    json_str = call_llm(EXTRACTOR_SYSTEM_PROMPT, user_message)
-    json_str = json_str.replace("```json", "").replace("```", "").strip()
+    rule_hint_prompt = ""
+    rule_hint = _build_rule_hint_snapshot(rule_data)
+    if rule_hint:
+        rule_hint_prompt = f"【規則式輔助線索】: {json.dumps(rule_hint, ensure_ascii=False)}\n"
 
     data = None
     try:
+        rule_merged = _merge_partial_parse(current_state, rule_data)
         try:
-            data = json.loads(json_str)
-        except json.JSONDecodeError:
-            lines = json_str.splitlines()
-            for line in lines:
-                line = line.strip()
-                if line.startswith("{") and line.endswith("}"):
-                    try:
-                        data = json.loads(line)
-                        break
-                    except Exception:
-                        continue
+            from services.llm_client import call_llm
 
-        if not data:
-            print("解析失敗，LLM 回傳了什麼？")
-            print(json_str)
-            raise ValueError("無法解析 LLM 回應 (JSON 格式錯誤 或 為空)")
+            user_message = (
+                f"{state_prompt}"
+                f"{rule_hint_prompt}"
+                f"【用戶新指令】: {user_input}\n"
+                "請輸出完整目前牌局 JSON snapshot。"
+            )
+            json_str = call_llm(
+                EXTRACTOR_SYSTEM_PROMPT,
+                user_message,
+                response_mime_type="application/json",
+            )
+            llm_payload = _extract_json_object(json_str)
+            if not llm_payload:
+                print("解析失敗，LLM 回傳了什麼？")
+                print(json_str)
+                raise ValueError("無法解析 LLM 回應 (JSON 格式錯誤 或 為空)")
+            data = _normalize_llm_snapshot(llm_payload, current_state)
+            data = _merge_llm_snapshot(current_state, data)
+            if data.get("is_strategy_query") and _has_meaningful_hand_update(data):
+                data["is_strategy_query"] = False
+        except Exception as exc:
+            if _has_complete_rule_parse(rule_merged):
+                data = rule_merged
+            else:
+                if isinstance(exc, ValueError):
+                    raise
+                raise ValueError(f"LLM 解析失敗: {exc}")
 
-        if isinstance(data, list):
-            print("(偵測到多個情境，將只分析第一手牌)")
-            data = data[0] if data else {}
-
-        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
-        missing_fields = meta.get("missing_fields") or data.get("missing_fields") or []
+        missing_fields = data.get("missing_fields") or []
         if missing_fields:
             # Filter out missing fields that can be inferred (specifically 'call' amounts)
             # The LLM might flag "actions.preflop.call.amount" as missing, but our logic computes it.
@@ -364,6 +954,9 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
                     continue
                 # [NEW] Ignore stack missing fields, we will default them to 100bb
                 if "stack_bb" in f_str:
+                    continue
+                # Derived fields are computed by backend; parser does not need them.
+                if f_str in {"pot_bb", "amount_to_call", "spr"}:
                     continue
                 
                 real_missing.append(field)
@@ -381,7 +974,7 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
                 elif field == "hero.position" or field == "hero_position": state_key = "hero_position"
                 elif field == "villain.position" or field == "villain_position": state_key = "villain_position"
                 
-                val = current_state.get(state_key) if current_state else None
+                val = data.get(state_key)
                 if val is not None and val != [] and val != "":
                     continue
 
@@ -424,14 +1017,6 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
                 if final_missing:
                     raise ValueError(f"資訊不足，請補充: {', '.join(map(str, final_missing))}")
 
-        if "error" in data:
-            # 如果是「需要補充」且前面已經檢查過 missing_fields (或 missing_fields 為空),
-            # 我們假設若還有缺漏會在後面的 _validate_constraints 或 hard check 中被抓到
-            if data["error"] == "需要補充":
-                pass
-            else:
-                raise ValueError(f"解析錯誤: {data['error']}")
-
         required_fields = [
             "hero_position",
             "villain_position",
@@ -450,33 +1035,20 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
                 return preserved
             raise ValueError("無法執行策略查詢：缺少當前牌局狀態 (Current State Missing)")
 
-        players = data.get("players") if isinstance(data.get("players"), dict) else {}
-        hero_info = players.get("hero") if isinstance(players.get("hero"), dict) else {}
-        villain_info = players.get("villain") if isinstance(players.get("villain"), dict) else {}
-
-        if current_state is None:
-            current_state = {}
-
-        hero_pos = hero_info.get("position") or data.get("hero_position") or current_state.get("hero_position")
-        villain_pos = villain_info.get("position") or data.get("villain_position") or current_state.get("villain_position")
+        hero_pos = data.get("hero_position")
+        villain_pos = data.get("villain_position")
         
         # Stacks: 0 is valid, so check for None explicitly
-        hero_stack = hero_info.get("stack_bb")
-        if hero_stack is None: hero_stack = data.get("hero_stack_bb")
-        if hero_stack is None: hero_stack = current_state.get("hero_stack_bb")
+        hero_stack = data.get("hero_stack_bb")
         # [NEW] Default to 100bb if not specified
         if hero_stack is None: hero_stack = 100.0
 
-        villain_stack = villain_info.get("stack_bb")
-        if villain_stack is None: villain_stack = data.get("villain_stack_bb")
-        if villain_stack is None: villain_stack = current_state.get("villain_stack_bb")
+        villain_stack = data.get("villain_stack_bb")
         # [NEW] Default to 100bb if not specified
         if villain_stack is None: villain_stack = 100.0
 
-        hero_cards = hero_info.get("cards") or data.get("hero_hole_cards") or current_state.get("hero_hole_cards") or []
-
-        board = data.get("board") if isinstance(data.get("board"), dict) else {}
-        board_cards = board.get("cards") or data.get("board_cards") or current_state.get("board_cards") or []
+        hero_cards = data.get("hero_hole_cards") or []
+        board_cards = data.get("board_cards") or []
 
         hero_cards = normalize_card_input(hero_cards)
         board_cards = normalize_card_input(board_cards)
@@ -489,9 +1061,6 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
             street = derived_street
 
         raw_actions = data.get("actions", [])
-        if not raw_actions and current_state:
-             raw_actions = current_state.get("actions", [])
-
         actions = _normalize_actions_from_model(raw_actions, hero_pos or "", villain_pos or "")
 
         hero_stack = _coerce_float(hero_stack)
@@ -672,7 +1241,9 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
             street_actions = actions.get(street, [])
             if isinstance(street_actions, list) and street_actions:
                 inferred = _infer_villain_action(actions, street, villain_pos)
-                data["villain_action"] = inferred or "check"
+                data["villain_action"] = inferred or ""
+            else:
+                data["villain_action"] = ""
 
         pot_raw = data.get("pot_bb")
         stack_raw = data.get("hero_stack_bb")
@@ -697,6 +1268,9 @@ def parse_poker_situation(user_input: str, current_state: Dict[str, Any] = None)
             err_msg = "\\n".join(validation_errors)
             print(f"Validation Error: {err_msg}")
             raise ValueError(f"牌局不符合系統限制:\\n{err_msg}")
+
+        for key in ("_action_streets", "_clear_action_streets", "_mentioned_streets", "_has_new_info"):
+            data.pop(key, None)
 
         return data
 

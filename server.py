@@ -9,6 +9,7 @@ import signal
 import traceback
 import asyncio
 import uuid
+import copy
 
 # 引入現有的 agent 邏輯
 import agent
@@ -22,12 +23,14 @@ class GameSession:
     def __init__(self):
         self.session_id = str(uuid.uuid4())
         self.current_context = None
+        self.internal_strategy_state = None
         self.chat_history = []
         self.last_strategy = None
 
     def reset(self):
         self.session_id = str(uuid.uuid4())  # Rotate session ID
         self.current_context = None
+        self.internal_strategy_state = None
         self.chat_history = [{"role": "assistant", "content": "🧹 記憶已清除，請輸入新牌局。"}]
         self.last_strategy = None
 
@@ -64,11 +67,11 @@ async def chat(request: ChatRequest):
         session.chat_history.append({"role": "user", "content": user_message})
 
     # Define synchronous processing function
-    def process_chat_logic(user_msg, current_ctx, history, ui_updates):
+    def process_chat_logic(user_msg, current_ctx, strategy_state, history, ui_updates):
         try:
             # Phase 0: Enforce UI State Updates (Override memory)
             # This ensures that if user sees cards in UI, backend SEES them too.
-            effective_ctx = current_ctx.copy() if current_ctx else {}
+            effective_ctx = copy.deepcopy(current_ctx) if current_ctx else {}
             
             if ui_updates:
                 # Map frontend keys to backend keys if needed, or assume consistent
@@ -100,12 +103,17 @@ async def chat(request: ChatRequest):
 
             # Phase 2: 策略 (Strategy Calculation)
             # Pass the UPDATED local_ctx
-            strategy_output = recommend_action(local_ctx)
-            
+            strategy_input = copy.deepcopy(local_ctx)
+            if strategy_state:
+                strategy_input["_strategy_state"] = copy.deepcopy(strategy_state)
+            strategy_output = recommend_action(strategy_input)
+
             # Update Context with Math Data from Strategy
             if "context" in strategy_output:
                 local_ctx.update(strategy_output["context"])
-            
+            local_ctx.pop("_strategy_state", None)
+            next_strategy_state = strategy_output.get("strategy_state") if isinstance(strategy_output.get("strategy_state"), dict) else strategy_state
+
             # Phase 3: 表達 (Agent Advice Generation)
             history_copy = list(history) # Work on copy
             final_advice = agent.generate_coaching_advice(
@@ -114,11 +122,14 @@ async def chat(request: ChatRequest):
                 strategy_result=strategy_output, 
                 chat_history=history_copy
             )
-            
+            public_strategy = copy.deepcopy(strategy_output)
+            public_strategy.pop("strategy_state", None)
+
             return {
                 "advice": final_advice.strip(),
                 "context": local_ctx,
-                "strategy": strategy_output
+                "strategy_state": next_strategy_state,
+                "strategy": public_strategy
             }
         except ValueError as ve:
              return {"error": f"❌ {str(ve)}"}
@@ -137,6 +148,7 @@ async def chat(request: ChatRequest):
             process_chat_logic, 
             user_message, 
             session.current_context,
+            session.internal_strategy_state,
             session.chat_history[:-1], # Exclude the just-added user message
             ui_state # [NEW] Pass UI state
         )
@@ -157,6 +169,7 @@ async def chat(request: ChatRequest):
         
         # Success: Update Session
         session.current_context = result["context"]
+        session.internal_strategy_state = result.get("strategy_state")
         session.last_strategy = result["strategy"]
         
         final_advice = result["advice"]

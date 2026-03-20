@@ -43,7 +43,11 @@ def generate_coaching_advice(user_input: str, game_state: Dict[str, Any], strate
     pos_text = "有位置 (IP)" if is_ip else "無位置 (OOP)"
     
     # 判斷對手動作
-    villain_act = game_state.get("villain_action", "check")
+    villain_act = str(game_state.get("villain_action", "") or "")
+    line_state = str(ctx.get("line_state", game_state.get("line_state", "")) or "")
+    board_transition = ctx.get("board_transition", game_state.get("board_transition", {}))
+    if not isinstance(board_transition, dict):
+        board_transition = {}
     
     # SPR / Pot / Odds
     math_data = strategy_result.get("math_data", {}) or {}
@@ -62,8 +66,25 @@ def generate_coaching_advice(user_input: str, game_state: Dict[str, Any], strate
         pot_odds_text = "未知" if unknown_call else "—"
     if unknown_call:
         act_desc = "對手下注 (尺寸未知)"
-    else:
+    elif villain_act:
         act_desc = f"對手下注 ({amount_call:.2f}bb)" if amount_call > 0 else f"對手 {villain_act}"
+    else:
+        act_desc = f"對手下注 ({amount_call:.2f}bb)" if amount_call > 0 else "本街尚未觀察到對手動作"
+
+    line_state_text = line_state if line_state else "未分類"
+    if board_transition.get("new_card"):
+        transition_parts = [f"新牌 {board_transition.get('new_card')}"]
+        if board_transition.get("has_scare"):
+            transition_parts.append("屬於 scare card")
+        if board_transition.get("completes_flush"):
+            transition_parts.append("帶來同花完成壓力")
+        if board_transition.get("increases_straight_pressure"):
+            transition_parts.append("帶來順子完成壓力")
+        if board_transition.get("pairs_board"):
+            transition_parts.append("讓公牌成對")
+        board_transition_text = " / ".join(transition_parts)
+    else:
+        board_transition_text = "—"
 
     # --- 2. 策略矩陣與尺寸 ---
     # [修改] 從新的 strategy output 結構讀取
@@ -127,12 +148,18 @@ def generate_coaching_advice(user_input: str, game_state: Dict[str, Any], strate
         # [NEW] 注入詳細範圍組成
         def _fmt_summary(summary):
             if not summary: return "未知"
+            
+            total_combos = summary.get("total_active_combos", 1.0)
+            if total_combos <= 0: total_combos = 1.0
+            
             # 排序取出前 5 名高頻率牌型
             items = sorted(summary.items(), key=lambda x: x[1], reverse=True)
             top_items = []
             for k, v in items:
                 if k == "total_active_combos" or v < 0.01: continue
-                top_items.append(f"{k}({v*100:.0f}%)")
+                pct = (v / total_combos) * 100
+                if pct < 1.0: continue # 忽略佔比不到 1% 的牌型
+                top_items.append(f"{k}({pct:.0f}%)")
                 if len(top_items) >= 5: break
             return ", ".join(top_items)
 
@@ -153,9 +180,11 @@ def generate_coaching_advice(user_input: str, game_state: Dict[str, Any], strate
     4. 手牌: {game_state.get('hero_hole_cards')} ({hand_cat})
     5. 公牌: {game_state.get('board_cards')}
     6. 對手行動: {act_desc}
-    7. 需跟注: {amount_text}
-    8. 底池賠率: {pot_odds_text}
-    9. 範圍數據 (Range Analysis): {math_section}
+    7. 行動線節點: {line_state_text}
+    8. 新牌影響: {board_transition_text}
+    9. 需跟注: {amount_text}
+    10. 底池賠率: {pot_odds_text}
+    11. 範圍數據 (Range Analysis): {math_section}
 
 
     【🤖 Solver 運算結果】
@@ -186,6 +215,7 @@ def start_chat_mode():
     print("="*80)
 
     current_context = None
+    current_strategy_state = None
     chat_history = []      # Chat Memory (列表)
 
     while True:
@@ -201,12 +231,14 @@ def start_chat_mode():
             # 重置邏輯 (同時清空兩種記憶)
             if user_input in ["下一手", "重來", "reset"]:
                 current_context = None
+                current_strategy_state = None
                 chat_history = [] 
                 print("🧹 記憶已清除，請輸入新牌局。")
                 continue
             
             if "下一手" in user_input and len(user_input) > 5:
                 current_context = None
+                current_strategy_state = None
                 chat_history = []
                 print("🧹 (偵測到新牌局，記憶已清除)")
 
@@ -226,13 +258,18 @@ def start_chat_mode():
             
             # Phase 2: 策略 (純邏輯 - 呼叫新的 Engine)
             # engine.recommend_action 會回傳包含 math_data 的完整結果
-            strategy_output = recommend_action(current_context)
-            
+            strategy_input = dict(current_context)
+            if current_strategy_state:
+                strategy_input["_strategy_state"] = current_strategy_state
+            strategy_output = recommend_action(strategy_input)
+            if isinstance(strategy_output.get("strategy_state"), dict):
+                current_strategy_state = strategy_output["strategy_state"]
+
             # [重要] 更新 context 中的數學數據，讓下一輪對話知道優勢狀態
             # Engine 會把 range math 存在 strategy_output["context"]
             if "context" in strategy_output:
                 current_context.update(strategy_output["context"])
-            
+
             # Phase 3: 表達 (帶 Chat History，保持連貫)
             final_advice = generate_coaching_advice(user_input, current_context, strategy_output, chat_history)
             

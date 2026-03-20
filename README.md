@@ -87,8 +87,44 @@ sh run_all.sh
         - `engine.py`: 策略決策總入口
         - `gto.py`: 數學模型計算 (MDF, Bluff Ratio, Alpha)
         - `streets/`: 各條街 (Preflop/Flop/Turn/River) 的具體策略實現
+        - `ranges/`: 範圍推理與評估
+            - `range.py`: 預設 range 及 combo 轉換
+            - `range_utils.py`: 動態範圍過濾
+            - `range_insights.py`: 範圍洞察（nuts/bluff/draw）
+            - `range_context.py`: range math 資料一致性檢查
+        - `reasoning/`: 推理核心
+            - `contextual_reasoner.py`: 行動歷史推理與範圍調整
+            - `board_structure.py`: 公牌/成牌判斷
+            - `strength_analyzer.py`: 牌力分級
     - `services/`: 外部服務整合
-        - `llm_client.py`: 與 LLM (OpenAI) 的通訊介面
-        - `prompts.py`: AI 角色設定與提示詞管理
+        - `llm_client.py`: 與 LLM (Gemini) 的通訊介面
+        - `prompts.py`: AI (Gemini) 角色設定與提示詞管理
     - `server.py`: FastAPI 應用程式入口與 API 定義
     - `agent.py`: 整合策略分析與自然語言生成的教練代理人
+
+---
+
+## 🧠 Strategy 模組架構
+
+系統核心：`strategy.engine.recommend_action()`。
+
+```mermaid
+flowchart TD
+    A[User/Agent] --> B[strategy.engine.recommend_action()]
+    B --> C{street?}
+    C -->|preflop| D[strategy.streets.preflop.recommend_action()]
+    C -->|flop| E[strategy.streets.flop.recommend_action()]
+    C -->|turn| F[strategy.streets.turn.recommend_action()]
+    C -->|river| G[strategy.streets.river.recommend_action()]
+
+    B --> H[strategy.ranges.get_dynamic_advantage()]
+    H --> I[strategy.ranges.range_utils.apply_action_history_to_ranges()]
+    I --> J[strategy.ranges.range.get_preflop_range()]
+    I --> K[strategy.reasoning.contextual_reasoner.ContextualReasoner.reason_street()]
+    K --> L[strategy.reasoning.board_structure/strength_analyzer]
+    K --> M[strategy.ranges.range_insights.RangeInsights.analyze_villain_range()]
+
+    M --> N[街道策略合成結果]
+    N --> B
+    B --> O[Agent/外部 API 回傳]
+```

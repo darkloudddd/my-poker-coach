@@ -2,6 +2,7 @@
 from typing import Dict, Any, List, Tuple, Optional
 from core.config import RANGE_WEIGHTS, ADVANTAGE_THRESHOLD_AGGRESSIVE, ADVANTAGE_THRESHOLD_DEFENSIVE
 import random
+import copy
 
 class GTOAnalyzer:
     """
@@ -135,15 +136,109 @@ def weighted_choice(action_probs: Dict[str, float]) -> str:
     return max(action_probs, key=action_probs.get)
 
 
-class DecisionMaker:
-    """
-    Backward-compatible wrapper around GTOAnalyzer for callers expecting this name.
-    """
-    def calculate_range_score(self, s: Dict[str, float]) -> float:
-        return GTOAnalyzer.calculate_range_score(s)
+def _build_street_snapshot(
+    street: str,
+    action: str,
+    amount_val: float,
+    sizing_val: float,
+    reasons: List[str],
+    ctx: Dict[str, Any],
+    math_data: Dict[str, Any],
+    adv_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "street": street,
+        "hero_position": ctx.get("hero_position"),
+        "villain_position": ctx.get("villain_position"),
+        "board_cards": list(ctx.get("board_cards", [])),
+        "hand_category": ctx.get("hand_category", "NA"),
+        "effective_hand_category": ctx.get("effective_hand_category", "NA"),
+        "recommended_action": action,
+        "amount": amount_val,
+        "sizing_ratio": sizing_val,
+        "villain_action": ctx.get("villain_action"),
+        "initiative_owner": ctx.get("initiative_owner"),
+        "checked_to_hero": bool(ctx.get("checked_to_hero", False)),
+        "hero_first_to_act": bool(ctx.get("hero_first_to_act", False)),
+        "line_state": ctx.get("line_state"),
+        "preflop_aggressor": ctx.get("preflop_aggressor"),
+        "range_advantage": adv_data.get("range_advantage", 1.0),
+        "realized_range_advantage": adv_data.get("realized_range_advantage", adv_data.get("range_advantage", 1.0)),
+        "nut_advantage": adv_data.get("nut_advantage", 1.0),
+        "board_transition": copy.deepcopy(ctx.get("board_transition", {})),
+        "has_turn_scare": bool(ctx.get("has_turn_scare", False)),
+        "hero_synergy": ctx.get("hero_synergy", 0),
+        "villain_synergy": ctx.get("villain_synergy", 0),
+        "pot_bb": math_data.get("current_pot", math_data.get("base_pot", 0.0)),
+        "spr": math_data.get("spr", ctx.get("spr", 0.0)),
+        "summary_reasons": list(reasons[:5]),
+    }
 
-    def analyze_advantage(self, hero_stats: Dict[str, float], villain_stats: Dict[str, float]) -> float:
-        return GTOAnalyzer.calculate_advantage_ratio(hero_stats, villain_stats)
+
+def _build_public_context(
+    ctx: Dict[str, Any],
+    math_data: Dict[str, Any],
+    adv_ratio: float,
+    adv_data: Dict[str, Any],
+    snapshot: Dict[str, Any],
+    street_snapshots: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "hand_category": ctx.get("hand_category", "NA"),
+        "effective_hand_category": ctx.get("effective_hand_category", "NA"),
+        "kicker_strength": ctx.get("kicker_strength", "NA"),
+        "spr": float(math_data.get("spr", ctx.get("spr", 0.0))),
+        "pot_odds": float(math_data.get("pot_odds", ctx.get("pot_odds", 0.0))),
+        "adv_ratio": adv_ratio,
+        "advantage_data": adv_data,
+        "math_data": math_data,
+        "preflop_aggressor": ctx.get("preflop_aggressor"),
+        "villain_action": ctx.get("villain_action"),
+        "initiative_owner": ctx.get("initiative_owner"),
+        "checked_to_hero": bool(ctx.get("checked_to_hero", False)),
+        "hero_first_to_act": bool(ctx.get("hero_first_to_act", False)),
+        "line_state": ctx.get("line_state"),
+        "board_transition": copy.deepcopy(ctx.get("board_transition", {})),
+        "has_turn_scare": bool(ctx.get("has_turn_scare", False)),
+        "hero_synergy": ctx.get("hero_synergy", 0),
+        "villain_synergy": ctx.get("villain_synergy", 0),
+        "villain_range_insights": ctx.get("villain_range_insights"),
+        "street_snapshots": street_snapshots,
+        "last_snapshot": snapshot,
+    }
+
+
+def _build_internal_strategy_state(
+    ctx: Dict[str, Any],
+    street: str,
+    math_data: Dict[str, Any],
+    adv_data: Dict[str, Any],
+    snapshot: Dict[str, Any],
+    street_snapshots: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "version": 1,
+        "current_street": street,
+        "ctx": {
+            "hero_position": ctx.get("hero_position"),
+            "villain_position": ctx.get("villain_position"),
+            "preflop_aggressor": ctx.get("preflop_aggressor"),
+            "math_data": copy.deepcopy(math_data),
+            "advantage_data": copy.deepcopy(adv_data),
+            "villain_range_insights": copy.deepcopy(ctx.get("villain_range_insights")),
+            "villain_action": ctx.get("villain_action"),
+            "initiative_owner": ctx.get("initiative_owner"),
+            "checked_to_hero": bool(ctx.get("checked_to_hero", False)),
+            "hero_first_to_act": bool(ctx.get("hero_first_to_act", False)),
+            "line_state": ctx.get("line_state"),
+            "board_transition": copy.deepcopy(ctx.get("board_transition", {})),
+            "has_turn_scare": bool(ctx.get("has_turn_scare", False)),
+            "hero_synergy": ctx.get("hero_synergy", 0),
+            "villain_synergy": ctx.get("villain_synergy", 0),
+            "street_snapshots": copy.deepcopy(street_snapshots),
+            "last_snapshot": copy.deepcopy(snapshot),
+        },
+    }
 
 def format_output(
     street: str,
@@ -258,6 +353,21 @@ def format_output(
     adv_summary = f"Range: {r_adv:.2f} | Realized: {real_adv:.2f} | Nut: {n_adv:.2f}"
     rf_balance = f"Realization: H {h_rf:.2f} / V {v_rf:.2f}"
 
+    street_snapshots = copy.deepcopy(ctx.get("street_snapshots", {})) if isinstance(ctx.get("street_snapshots"), dict) else {}
+    snapshot = _build_street_snapshot(
+        street,
+        action,
+        amount_val,
+        sizing_val,
+        reasons,
+        ctx,
+        math_data,
+        adv_data,
+    )
+    street_snapshots[street] = snapshot
+    public_context = _build_public_context(ctx, math_data, adv_ratio, adv_data, snapshot, street_snapshots)
+    strategy_state = _build_internal_strategy_state(ctx, street, math_data, adv_data, snapshot, street_snapshots)
+
     # 5. 構建返回物件
     res: Dict[str, Any] = {
         "street": street,
@@ -278,13 +388,8 @@ def format_output(
             "realization_balance": rf_balance
         },
         "math_data": math_data or {},
-        "context": {
-             "hand_category": hand_cat,
-             "kicker_strength": kicker,
-             "spr": spr_val,
-             "adv_ratio": adv_ratio,
-             "advantage_data": adv_data
-        }
+        "context": public_context,
+        "strategy_state": strategy_state,
     }
     if size_details: res["size_details"] = size_details
     return res

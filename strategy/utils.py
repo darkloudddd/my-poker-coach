@@ -5,7 +5,6 @@ from typing import List, Tuple, Dict, Any, Optional
 # 1. 橋接 Features (核心數據源)
 # ==============================================================================
 try:
-    # [關鍵修正] 這裡必須明確引入 get_rank_value，因為 range.py 會從這裡 import 它
     from features import (
         RANKS,
         RANK_VALUE,

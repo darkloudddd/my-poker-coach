@@ -6,45 +6,45 @@
 
 ```mermaid
 sequenceDiagram
-    participant User as 👤 User (Input)
-    participant Agent as 🤖 Agent (Controller)
-    participant Parser as 🧩 Parser (features.py)
-    participant Engine as ⚙️ Strategy Engine
-    participant Context as 📚 Range Context
-    participant LLM as 🧠 LLM (Chat)
+    participant User as "👤 User (Input)"
+    participant Agent as "🤖 Agent (Controller)"
+    participant Parser as "🧩 Parser (features.py)"
+    participant Engine as "⚙️ Strategy Engine"
+    participant Context as "📚 Range Context"
+    participant LLM as "🧠 LLM (Chat)"
 
-    User->>Agent: 輸入牌局 (e.g., "BTN open, BB call, Flop K72")
+    User->>Agent: "輸入牌局 (e.g., BTN open, BB call, Flop K72)"
     
     rect rgb(200, 240, 255)
-    Note over Agent, Parser: 階段一：感知與解析
-    Agent->>Parser: 解析自然語言
-    Parser-->>Agent: 輸出標準化特徵 (JSON Features)
+    Note over Agent, Parser: "階段一：感知與解析"
+    Agent->>Parser: "解析自然語言"
+    Parser-->>Agent: "輸出標準化特徵 (JSON Features)"
     end
 
     rect rgb(255, 230, 200)
-    Note over Agent, Engine: 階段二：策略運算 (纯數學)
-    Agent->>Engine: 請求策略 (recommend_action)
+    Note over Agent, Engine: "階段二：策略運算 (纯數學)"
+    Agent->>Engine: "請求策略 (recommend_action)"
     
-    Engine->>Context: 1. 讀取 GTO 範圍 (ensure_range_math_data)
-    Context->>Context: 根據位置與行動過濾範圍 (Range Capping)
-    Context-->>Engine: 回傳範圍優勢數據 (Advantage, Nut Adv)
+    Engine->>Context: "1. 讀取 GTO 範圍 (ensure_range_math_data)"
+    Context->>Context: "根據位置與行動過濾範圍 (Range Capping)"
+    Context-->>Engine: "回傳範圍優勢數據 (Advantage, Nut Adv)"
     
-    Engine->>Engine: 2. 執行 Solver 決策樹 (MDF, Geometric Sizing)
-    Engine-->>Agent: 回傳完整策略結果 (含 math_data)
+    Engine->>Engine: "2. 執行 Solver 決策樹 (MDF, Geometric Sizing)"
+    Engine-->>Agent: "回傳完整策略結果 (含 math_data)"
     end
 
     rect rgb(220, 255, 220)
-    Note over Agent, LLM: 階段三：表達與防幻覺 (本次強化重點)
-    Agent->>Agent: 🔍 數據注入 (Data Injection)
-    Note right of Agent: 將範圍前五名 (Top 5 Combos)<br/>與範例手牌 (Example Hands)<br/>格式化為文字
+    Note over Agent, LLM: "階段三：表達與防幻覺 (本次強化重點)"
+    Agent->>Agent: "🔍 數據注入 (Data Injection)"
+    Note right of Agent: "將範圍前五名 (Top 5 Combos) 與範例手牌 (Example Hands) 格式化為文字"
     
-    Agent->>LLM: 構建 Prompt (COACH_SYSTEM_PROMPT)
-    Note right of LLM: 🛡️ Prompt 限制：<br/>1. 嚴禁違背 Solver 建議<br/>2. 嚴禁 River 聽牌幻覺<br/>3. 強制引用範圍數據
+    Agent->>LLM: "構建 Prompt (COACH_SYSTEM_PROMPT)"
+    Note right of LLM: "🛡️ Prompt 限制：1. 嚴禁違背 Solver 建議 2. 嚴禁 River 聽牌幻覺 3. 強制引用範圍數據"
     
-    LLM-->>Agent: 生成自然語言建議
+    LLM-->>Agent: "生成自然語言建議"
     end
 
-    Agent->>User: 顯示最終建議 (Markdown)
+    Agent->>User: "顯示最終建議 (Markdown)"
 ```
 
 ---
@@ -227,31 +227,32 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    A[輸入: User/Agent] --> B[strategy.engine.recommend_action()]
-    B --> C{street?}
-    C -->|preflop| D[strategy.streets.preflop.recommend_action()]
-    C -->|flop| E[strategy.streets.flop.recommend_action()]
-    C -->|turn| F[strategy.streets.turn.recommend_action()]
-    C -->|river| G[strategy.streets.river.recommend_action()]
+    A["輸入: User/Agent"] --> B["strategy.engine.recommend_action()"]
+    C{"street?"}
+    B --> C
+    C -->|preflop| D["strategy.streets.preflop.recommend_action()"]
+    C -->|flop| E["strategy.streets.flop.recommend_action()"]
+    C -->|turn| F["strategy.streets.turn.recommend_action()"]
+    C -->|river| G["strategy.streets.river.recommend_action()"]
 
-    B --> H[strategy.ranges.get_dynamic_advantage()]
-    H --> I[strategy.ranges.range_utils.apply_action_history_to_ranges()]
-    I --> J[strategy.ranges.range.range_via get_preflop_range()]
-    I --> K[strategy.reasoning.contextual_reasoner.ContextualReasoner.reason_street()]
-    K --> L[strategy.reasoning.board_structure / strength_analyzer]
-    K --> M[回傳新的 villain_range]
+    B --> H["strategy.ranges.get_dynamic_advantage()"]
+    H --> I["strategy.ranges.range_utils.apply_action_history_to_ranges()"]
+    I --> J["strategy.ranges.range.range_via get_preflop_range()"]
+    I --> K["strategy.reasoning.contextual_reasoner.ContextualReasoner.reason_street()"]
+    K --> L["strategy.reasoning.board_structure / strength_analyzer"]
+    K --> M["回傳新的 villain_range"]
 
-    M --> N[strategy.ranges.range_insights.RangeInsights.analyze_villain_range()]
+    M --> N["strategy.ranges.range_insights.RangeInsights.analyze_villain_range()"]
 
-    D --> O[strategy.gto.GTOAnalyzer 等計算]
+    D --> O["strategy.gto.GTOAnalyzer 等計算"]
     E --> O
     F --> O
     G --> O
 
-    N --> P[街道策略合成決策]
+    N --> P["街道策略合成決策"]
     P --> B
 
-    B --> Q[回傳結果給 Agent/上層]
+    B --> Q["回傳結果給 Agent/上層"]
 ```
 
 ### 6.1 核心呼叫邏輯說明

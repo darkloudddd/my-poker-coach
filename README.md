@@ -110,21 +110,22 @@ sh run_all.sh
 
 ```mermaid
 flowchart TD
-    A[User/Agent] --> B[strategy.engine.recommend_action()]
-    B --> C{street?}
-    C -->|preflop| D[strategy.streets.preflop.recommend_action()]
-    C -->|flop| E[strategy.streets.flop.recommend_action()]
-    C -->|turn| F[strategy.streets.turn.recommend_action()]
-    C -->|river| G[strategy.streets.river.recommend_action()]
+    A["User/Agent"] --> B["strategy.engine.recommend_action()"]
+    C{"street?"}
+    B --> C
+    C -->|preflop| D["strategy.streets.preflop.recommend_action()"]
+    C -->|flop| E["strategy.streets.flop.recommend_action()"]
+    C -->|turn| F["strategy.streets.turn.recommend_action()"]
+    C -->|river| G["strategy.streets.river.recommend_action()"]
 
-    B --> H[strategy.ranges.get_dynamic_advantage()]
-    H --> I[strategy.ranges.range_utils.apply_action_history_to_ranges()]
-    I --> J[strategy.ranges.range.get_preflop_range()]
-    I --> K[strategy.reasoning.contextual_reasoner.ContextualReasoner.reason_street()]
-    K --> L[strategy.reasoning.board_structure/strength_analyzer]
-    K --> M[strategy.ranges.range_insights.RangeInsights.analyze_villain_range()]
+    B --> H["strategy.ranges.get_dynamic_advantage()"]
+    H --> I["strategy.ranges.range_utils.apply_action_history_to_ranges()"]
+    I --> J["strategy.ranges.range.get_preflop_range()"]
+    I --> K["strategy.reasoning.contextual_reasoner.ContextualReasoner.reason_street()"]
+    K --> L["strategy.reasoning.board_structure/strength_analyzer"]
+    K --> M["strategy.ranges.range_insights.RangeInsights.analyze_villain_range()"]
 
-    M --> N[街道策略合成結果]
+    M --> N["街道策略合成結果"]
     N --> B
-    B --> O[Agent/外部 API 回傳]
+    B --> O["Agent/外部 API 回傳"]
 ```
